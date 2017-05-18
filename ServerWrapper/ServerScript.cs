@@ -3,11 +3,7 @@ using CitizenMP.Server.Game;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
-using System.Globalization;
-using System.IO;
 using System.Linq;
-using System.Reflection;
-using System.Runtime.Serialization.Formatters.Binary;
 
 namespace ServerWrapper
 {
@@ -54,6 +50,9 @@ namespace ServerWrapper
     public abstract class ServerScript : MarshalByRefObject, IServerScript
     {
         public string Name { get; private set; }
+        public string TypeName { get { return this.GetType().FullName; } }
+        private List<string> dependencies = new List<string>();
+        public ReadOnlyCollection<string> Dependencies { get; private set; }
 
         public ReadOnlyDictionary<string, Player> Players { get { return w.Players; } }
         public ReadOnlyDictionary<ushort, Player> PlayersByNetId { get { return w.PlayersByNetId; } }
@@ -77,7 +76,7 @@ namespace ServerWrapper
                 {
                     timer.Loop = value;
 
-                    timer.Cancel();
+                    if (!value) timer.Cancel();
                 }
             }
         }
@@ -87,13 +86,15 @@ namespace ServerWrapper
         public ServerScript(string name) : base()
         {
             Name = name;
+
+            Dependencies = new ReadOnlyCollection<string>(dependencies);
         }
 
-        internal void CreateProxy(Wrapper wrapper)
+        internal void CreateProxy(Wrapper wrapper, Queue<IServerScript> scripts)
         {
             w = wrapper;
 
-            SetTimeout(0, (t) => { w.Print("ServerWrapper: Proxy created for script \"" + Name + "\""); t.Loop = false; w.ETPhoneHome(this); }); // First ScriptTimer with Print and a call to Loop (usually) causes a small hiccup of 32~150ms for whatever reason, better have it done ahead of time.
+            SetTimeout(0, (t) => { w.RconPrint("ServerWrapper: Proxy created for script \"" + Name + "\""); w.RconPrint(""); t.Loop = false; w.ETPhoneHome(this, scripts); }); // First ScriptTimer with Print and a call to Loop (usually) causes a small hiccup of 32~150ms for whatever reason, better have it done ahead of time.
         }
 
         public abstract void Load();
@@ -101,6 +102,11 @@ namespace ServerWrapper
         public abstract void Unload();
 
         public abstract void Tick();
+
+        public void AddDependency(Type type)
+        {
+            if (type.IsSubclassOf(typeof(ServerScript)) && !dependencies.Contains(type.FullName)) dependencies.Add(type.FullName);
+        }
 
         public void Print(params object[] args)
         {

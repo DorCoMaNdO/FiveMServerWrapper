@@ -6,7 +6,6 @@ using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
 using System.Reflection;
-using System.Threading;
 
 namespace ServerWrapper
 {
@@ -223,9 +222,51 @@ namespace ServerWrapper
             _scripts.Add(path, scripts);
 
             instance.RconPrint("ServerWrapper: " + scripts.Count + " script(s) found in \"" + path + "\".");
+            instance.RconPrint("");
 
-            foreach (IServerScript script in scripts)
+            // Sorting logic from ScriptHookVDotNet
+            Dictionary<IServerScript, List<string>> graph = new Dictionary<IServerScript, List<string>>();
+            Queue<IServerScript> sorted = new Queue<IServerScript>();
+
+            foreach (IServerScript script in scripts) graph.Add(script, new List<string>(script.Dependencies));
+
+            while (graph.Count > 0)
             {
+                IServerScript s = null;
+
+                foreach (var kv in graph)
+                {
+                    if (kv.Value.Count == 0)
+                    {
+                        s = kv.Key;
+
+                        break;
+                    }
+                }
+
+                if (s == null)
+                {
+                    instance.RconPrint("ServerWrapper: Detected a circular script dependency. Aborting...");
+                    instance.RconPrint("");
+
+                    return;
+                }
+
+                sorted.Enqueue(s);
+                graph.Remove(s);
+
+                foreach (var kv in graph) kv.Value.Remove(s.TypeName);
+            }
+
+            LoadScripts(sorted);
+        }
+
+        private static void LoadScripts(Queue<IServerScript> scripts)
+        {
+            if (scripts.Count > 0)
+            {
+                IServerScript script = scripts.Dequeue();
+
                 ServerScript ss = ((ServerScript)script);
 
                 ss.timer = new ScriptTimer(ss, 100, (timer) =>
@@ -244,11 +285,11 @@ namespace ServerWrapper
 
                 instance.RconPrint("ServerWrapper: Creating proxy for script \"" + script.Name + "\"...");
 
-                ss.CreateProxy(instance);
+                ss.CreateProxy(instance, scripts);
             }
         }
 
-        internal void ETPhoneHome(ServerScript script)
+        internal void ETPhoneHome(ServerScript script, Queue<IServerScript> scripts)
         {
             try
             {
@@ -260,16 +301,20 @@ namespace ServerWrapper
                 PrintException(e);
             }
 
-            script.timer.Start();
+            if (script.timer.Loop) script.timer.Start();
+
+            LoadScripts(scripts);
         }
 
         private static void Reload(string path)
         {
             instance.RconPrint("ServerWrapper: Reloading scripts in \"" + path + "\"... (Unloading...)");
+            instance.RconPrint("");
 
             Unload(path);
 
             instance.RconPrint("ServerWrapper: Reloading scripts in \"" + path + "\"... (Loading...)");
+            instance.RconPrint("");
 
             Load(path);
         }
@@ -291,6 +336,7 @@ namespace ServerWrapper
             }
 
             instance.RconPrint("ServerWrapper: " + oldscripts.Count + " script(s) unloaded from \"" + path + "\".");
+            instance.RconPrint("");
 
             ScriptTimer[] timers;
             lock (ScriptTimers) timers = ScriptTimers.ToArray();

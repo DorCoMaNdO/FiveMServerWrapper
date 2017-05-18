@@ -10,7 +10,8 @@ namespace ServerScriptExample
     {
         public ServerScriptExample() : base("ServerScriptExample")
         {
-            // Do anything that doesn't require functions provided by the Wrapper, those can only be used during or after Load() as a proxy needs to be created.
+            // Do anything that doesn't require functions provided by the Wrapper (Except AddDependency), those can only be used during or after Load() as a proxy needs to be created.
+            //AddDependency(typeof(MySQL)); // Controls the order in which scripts get Load()'d
         }
 
         public override void Load()
@@ -43,6 +44,11 @@ namespace ServerScriptExample
                     TriggerClientEvent("chatMessage", source, "", new[] { 255, 255, 255 }, "This is an example command.");
                 }
             }));
+
+            /*MySQL.ExecuteQuery("CREATE TABLE IF NOT EXISTS test (id INTEGER AUTO_INCREMENT PRIMARY KEY, steamid TEXT, cash BIGINT DEFAULT 0);", new Action(() =>
+            {
+                Print("Table created!");
+            }));*/
         }
 
         public override void Unload()
