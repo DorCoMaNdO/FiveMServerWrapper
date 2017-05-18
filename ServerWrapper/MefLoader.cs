@@ -11,7 +11,7 @@ namespace ServerWrapper
     /// <summary>
     /// Discovers and instantiates all classes from specified folder that implements specific MEF contract.
     /// </summary>
-    public class MefLoader : MarshalByRefObject, IDisposable // Taken from "Plugin framework" on codeproject - https://www.codeproject.com/Articles/831823/Plugin-framework
+    internal class MefLoader : MarshalByRefObject, IDisposable // Taken from "Plugin framework" on codeproject - https://www.codeproject.com/Articles/831823/Plugin-framework
     {
         private CompositionContainer _container;
 

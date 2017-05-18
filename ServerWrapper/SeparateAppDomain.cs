@@ -6,7 +6,7 @@ using System.Reflection;
 
 namespace ServerWrapper
 {
-    public static class SeparateAppDomain // Taken from "Plugin framework" on codeproject - https://www.codeproject.com/Articles/831823/Plugin-framework
+    internal static class SeparateAppDomain // Taken from "Plugin framework" on codeproject - https://www.codeproject.com/Articles/831823/Plugin-framework
     {
         private static int _counter = 0;
         private static Dictionary<string, Tuple<AppDomain, object>> _domains = new Dictionary<string, Tuple<AppDomain, object>>();
