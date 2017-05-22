@@ -59,6 +59,8 @@ namespace ServerWrapper
             }
             catch (Exception ex)
             {
+                if (Wrapper.instance != null) Wrapper.instance.PrintException(ex);
+
                 throw new FormatException("Load of MEF file failed.", ex);
             }
         }

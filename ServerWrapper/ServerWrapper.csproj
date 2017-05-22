@@ -55,6 +55,13 @@
     <Reference Include="CitizenMP.Server">
       <HintPath>..\..\..\..\..\Program Files\FiveM\cfx-server\CitizenMP.Server.exe</HintPath>
     </Reference>
+    <Reference Include="Neo.Lua">
+      <HintPath>..\packages\NeoLua.1.2.20\lib\net45\Neo.Lua.dll</HintPath>
+    </Reference>
+    <Reference Include="Newtonsoft.Json, Version=4.5.0.0, Culture=neutral, PublicKeyToken=30ad4fe6b2a6aeed, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\..\..\..\Newtonsoft.Json.dll</HintPath>
+    </Reference>
     <Reference Include="System" />
     <Reference Include="System.ComponentModel.Composition" />
   </ItemGroup>
@@ -66,6 +73,9 @@
     <Compile Include="ServerScript.cs" />
     <Compile Include="Wrapper.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="packages.config" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>

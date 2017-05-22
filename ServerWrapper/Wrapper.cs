@@ -1,11 +1,15 @@
 ﻿using CitizenMP.Server;
+using Newtonsoft.Json.Linq;
 using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Net;
 using System.Reflection;
+using System.Threading;
 
 namespace ServerWrapper
 {
@@ -158,7 +162,7 @@ namespace ServerWrapper
 
             Load(ScriptsFolder);
 
-            instance.AddEventHandler("rconCommand", new Action<string, dynamic>((string command, dynamic args) =>
+            instance.AddEventHandler("rconCommand", new Action<string, object>((command, args)=>
             {
                 if (command == "reloadscripts")
                 {
@@ -178,7 +182,98 @@ namespace ServerWrapper
 
                     if (_scripts.Count > 0) Unload(ScriptsFolder);
                 }
+                else if (command == "swupdate")
+                {
+                    instance.CancelEvent();
+
+                    Process.Start("explorer.exe", "https://forum.fivem.net/t/release-c-net-wrapper-for-server-side-scripts/20325");
+                }
+
+                /*object[] converted = ConvertArgsFromNLua(args);
+                new Action<string, List<object>>((c, a) =>
+                {
+                    if (c == "reloadscripts")
+                    {
+                        instance.CancelEvent();
+
+                        if (_scripts.Count > 0) Reload(ScriptsFolder);
+                    }
+                    else if (c == "loadscripts")
+                    {
+                        instance.CancelEvent();
+
+                        if (_scripts.Count == 0) Load(ScriptsFolder);
+                    }
+                    else if (c == "unloadscripts")
+                    {
+                        instance.CancelEvent();
+
+                        if (_scripts.Count > 0) Unload(ScriptsFolder);
+                    }
+                    else if (c == "swupdate")
+                    {
+                        instance.CancelEvent();
+
+                        Process.Start("explorer.exe", "https://forum.fivem.net/t/release-c-net-wrapper-for-server-side-scripts/20325");
+                    }
+                })(command, (List<object>)converted[0]);*/
             }));
+
+            instance.TriggerClientEvent("chatMessage", -1, "", new[] { 255, 255, 255 }, "test.");
+
+            new Thread(() =>
+            {
+                int CurrentMajor, CurrentMinor, CurrentBuild, CurrentRevision, NewMajor, NewMinor, NewBuild;
+                string[] currentver = Assembly.GetExecutingAssembly().GetName().Version.ToString().Split('.');
+                if (currentver.Length < 1 || !int.TryParse(currentver[0], out CurrentMajor)) CurrentMajor = 1;
+                if (currentver.Length < 2 || !int.TryParse(currentver[1], out CurrentMinor)) CurrentMinor = 2;
+                if (currentver.Length < 3 || !int.TryParse(currentver[2], out CurrentBuild)) CurrentBuild = 0;
+                if (currentver.Length < 4 || !int.TryParse(currentver[3], out CurrentRevision)) CurrentRevision = 0;
+                string current = CurrentMajor + "." + CurrentMinor + "." + CurrentBuild, latest = "";
+                //CurrentMajor = 0;
+                bool update = false;
+
+                while (true)
+                {
+                    try
+                    {
+                        if (!update)
+                        {
+                            using (WebClient w = new WebClient())
+                            {
+                                w.Proxy = null;
+                                w.Headers.Add("user-agent", "Mozilla/4.0 (compatible; MSIE 6.0; Windows NT 5.2; .NET CLR 1.0.3705;)"); // Fails without a user-agent header.
+
+                                JObject data = JObject.Parse(w.DownloadString("https://api.github.com/repos/DorCoMaNdO/FiveMServerWrapper/releases/latest"));
+                                string[] ver = data["tag_name"].ToString().Split('.');
+                                if (ver.Length < 1 || !int.TryParse(ver[0], out NewMajor)) NewMajor = 1;
+                                if (ver.Length < 2 || !int.TryParse(ver[1], out NewMinor)) NewMinor = 2;
+                                if (ver.Length < 3 || !int.TryParse(ver[2], out NewBuild)) NewBuild = 0;
+                                latest = NewMajor + "." + NewMinor + "." + NewBuild;
+
+                                update = NewMajor > CurrentMajor || NewMajor == CurrentMajor && NewMinor > CurrentMinor || NewMajor == CurrentMajor && NewMinor == CurrentMinor && NewBuild > CurrentBuild;
+                            }
+                        }
+
+                        if(update)
+                        {
+                            instance.RconPrint("ServerWrapper: ---------------------------------------------------------------------------------------------------");
+                            instance.RconPrint("ServerWrapper: An update to ServerWrapper is available!");
+                            instance.RconPrint("ServerWrapper: Current version: " + current + ", latest version: " + latest + ".");
+                            instance.RconPrint("ServerWrapper: For more info, visit https://forum.fivem.net/t/release-c-net-wrapper-for-server-side-scripts/20325.");
+                            instance.RconPrint("ServerWrapper: Or enter the command \"swupdate\" to open the link above in your default browser.");
+                            instance.RconPrint("ServerWrapper: ---------------------------------------------------------------------------------------------------");
+                        }
+                    }
+                    catch (Exception e)
+                    {
+                        instance.RconPrint("ServerWrapper: Update check failed, will try again in 10 minutes.");
+                        instance.PrintException(e);
+                    }
+
+                    Thread.Sleep(600000);
+                }
+            }).Start();
         }
 
         internal void PrintException(Exception e)
@@ -197,6 +292,23 @@ namespace ServerWrapper
         private static void Load(string path)
         {
             instance.RconPrint("ServerWrapper: Loading scripts in \"" + path + "\"...");
+
+            foreach (string file in Directory.GetFiles(path, "*.dll"))
+            {
+                if (AssemblyName.GetAssemblyName(file).Name == "ServerWrapper")
+                {
+                    instance.RconPrint("ServerWrapper: Found ServerWrapper assembly in Scripts folder. Removing...");
+                    try
+                    {
+                        File.Delete(file);
+                    }
+                    catch (Exception e)
+                    {
+                        instance.RconPrint("ServerWrapper: Failed to remove ServerWrapper assembly from Scripts folder, this may cause issues.");
+                        instance.PrintException(e);
+                    }
+                }
+            }
 
             MefLoader mefLoader = SeparateAppDomain.CreateInstance<MefLoader>(path, path);
 
@@ -278,7 +390,6 @@ namespace ServerWrapper
                     catch (Exception e)
                     {
                         instance.RconPrint("ServerWrapper: \"" + script.Name + "\"'s Tick() failed.");
-
                         instance.PrintException(e);
                     }
                 }, true);
@@ -359,10 +470,11 @@ namespace ServerWrapper
                     scripteventhandlers.Remove(script);
                 }
 
+                ScriptTimer t = ((ServerScript)script).timer;
+                if (t != null) t.Dispose();
+
                 try
                 {
-                    ((ServerScript)script).timer.Dispose();
-
                     script.Unload();
                 }
                 catch (Exception e)
@@ -450,9 +562,8 @@ namespace ServerWrapper
 
         internal void TriggerClientEvent(string eventname, int netID, params object[] args)
         {
-            if (EventScriptFunctionsTriggerClientEvent != null) EventScriptFunctionsTriggerClientEvent.Invoke(null, new object[] { eventname, netID, args });
+            if (EventScriptFunctionsTriggerClientEvent != null) EventScriptFunctionsTriggerClientEvent.Invoke(null, new object[] { eventname, netID, ConvertArgsToNLua(args) });
         }
-
         internal void RegisterServerEvent(string eventname)
         {
             if (EventScriptFunctionsRegisterServerEvent != null) EventScriptFunctionsRegisterServerEvent.Invoke(null, new object[] { eventname });
@@ -460,7 +571,7 @@ namespace ServerWrapper
 
         internal bool TriggerEvent(string eventname, params object[] args)
         {
-            if (EventScriptFunctionsTriggerEvent != null) return (bool)EventScriptFunctionsTriggerEvent.Invoke(null, new object[] { eventname, args });
+            if (EventScriptFunctionsTriggerEvent != null) return (bool)EventScriptFunctionsTriggerEvent.Invoke(null, new object[] { eventname, ConvertArgsToNLua(args) });
 
             return false;
         }
@@ -504,7 +615,26 @@ namespace ServerWrapper
 
                 if (scripteventhandlers[icaller][eventname].Any(h => h.Method.GetParameters().Length == args)) return;
 
-                Delegate[] handlers = { new Action(() => { caller.TriggerLocalEvent(eventname); }), new Action<object>((a1) => { caller.TriggerLocalEvent(eventname, a1); }), new Action<object, object>((a1, a2) => { caller.TriggerLocalEvent(eventname, a1, a2); }), new Action<object, object, object>((a1, a2, a3) => { caller.TriggerLocalEvent(eventname, a1, a2, a3); }), new Action<object, object, object, object>((a1, a2, a3, a4) => { caller.TriggerLocalEvent(eventname, a1, a2, a3, a4); }), new Action<object, object, object, object, object>((a1, a2, a3, a4, a5) => { caller.TriggerLocalEvent(eventname, a1, a2, a3, a4, a5); }), new Action<object, object, object, object, object, object>((a1, a2, a3, a4, a5, a6) => { caller.TriggerLocalEvent(eventname, a1, a2, a3, a4, a5, a6); }), new Action<object, object, object, object, object, object, object>((a1, a2, a3, a4, a5, a6, a7) => { caller.TriggerLocalEvent(eventname, a1, a2, a3, a4, a5, a6, a7); }), new Action<object, object, object, object, object, object, object, object>((a1, a2, a3, a4, a5, a6, a7, a8) => { caller.TriggerLocalEvent(eventname, a1, a2, a3, a4, a5, a6, a7, a8); }), new Action<object, object, object, object, object, object, object, object, object>((a1, a2, a3, a4, a5, a6, a7, a8, a9) => { caller.TriggerLocalEvent(eventname, a1, a2, a3, a4, a5, a6, a7, a8, a9); }), new Action<object, object, object, object, object, object, object, object, object, object>((a1, a2, a3, a4, a5, a6, a7, a8, a9, a10) => { caller.TriggerLocalEvent(eventname, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10); }), new Action<object, object, object, object, object, object, object, object, object, object, object>((a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11) => { caller.TriggerLocalEvent(eventname, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11); }), new Action<object, object, object, object, object, object, object, object, object, object, object, object>((a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12) => { caller.TriggerLocalEvent(eventname, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12); }), new Action<object, object, object, object, object, object, object, object, object, object, object, object, object>((a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13) => { caller.TriggerLocalEvent(eventname, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13); }), new Action<object, object, object, object, object, object, object, object, object, object, object, object, object, object>((a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14) => { caller.TriggerLocalEvent(eventname, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14); }), new Action<object, object, object, object, object, object, object, object, object, object, object, object, object, object, object>((a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15) => { caller.TriggerLocalEvent(eventname, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15); }), new Action<object, object, object, object, object, object, object, object, object, object, object, object, object, object, object, object>((a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16) => { caller.TriggerLocalEvent(eventname, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16); }) };
+                Delegate[] handlers =
+                {
+                    new Action(() => { caller.TriggerLocalEvent(eventname); }),
+                    new Action<object>((a1) => { object[] cargs = ConvertArgsFromNLua(a1); caller.TriggerLocalEvent(eventname, cargs[0]); }),
+                    new Action<object, object>((a1, a2) => { object[] cargs = ConvertArgsFromNLua(a1, a2); caller.TriggerLocalEvent(eventname, cargs[0], cargs[1]); }),
+                    new Action<object, object, object>((a1, a2, a3) => { object[] cargs = ConvertArgsFromNLua(a1, a2, a3); caller.TriggerLocalEvent(eventname, cargs[0], cargs[1], cargs[2]); }),
+                    new Action<object, object, object, object>((a1, a2, a3, a4) => { object[] cargs = ConvertArgsFromNLua(a1, a2, a3, a4); caller.TriggerLocalEvent(eventname, cargs[0], cargs[1], cargs[2], cargs[3]); }),
+                    new Action<object, object, object, object, object>((a1, a2, a3, a4, a5) => { object[] cargs = ConvertArgsFromNLua(a1, a2, a3, a4, a5); caller.TriggerLocalEvent(eventname, cargs[0], cargs[1], cargs[2], cargs[3], cargs[4]); }),
+                    new Action<object, object, object, object, object, object>((a1, a2, a3, a4, a5, a6) => { object[] cargs = ConvertArgsFromNLua(a1, a2, a3, a4, a5, a6); caller.TriggerLocalEvent(eventname, cargs[0], cargs[1], cargs[2], cargs[3], cargs[4], cargs[5]); }),
+                    new Action<object, object, object, object, object, object, object>((a1, a2, a3, a4, a5, a6, a7) => { object[] cargs = ConvertArgsFromNLua(a1, a2, a3, a4, a5, a6, a7); caller.TriggerLocalEvent(eventname, cargs[0], cargs[1], cargs[2], cargs[3], cargs[4], cargs[5], cargs[6]); }),
+                    new Action<object, object, object, object, object, object, object, object>((a1, a2, a3, a4, a5, a6, a7, a8) => { object[] cargs = ConvertArgsFromNLua(a1, a2, a3, a4, a5, a6, a7, a8); caller.TriggerLocalEvent(eventname, cargs[0], cargs[1], cargs[2], cargs[3], cargs[4], cargs[5], cargs[6], cargs[7]); }),
+                    new Action<object, object, object, object, object, object, object, object, object>((a1, a2, a3, a4, a5, a6, a7, a8, a9) => { object[] cargs = ConvertArgsFromNLua(a1, a2, a3, a4, a5, a6, a7, a8, a9); caller.TriggerLocalEvent(eventname, cargs[0], cargs[1], cargs[2], cargs[3], cargs[4], cargs[5], cargs[6], cargs[7], cargs[8]); }),
+                    new Action<object, object, object, object, object, object, object, object, object, object>((a1, a2, a3, a4, a5, a6, a7, a8, a9, a10) => { object[] cargs = ConvertArgsFromNLua(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10); caller.TriggerLocalEvent(eventname, cargs[0], cargs[1], cargs[2], cargs[3], cargs[4], cargs[5], cargs[6], cargs[7], cargs[8], cargs[9]); }),
+                    new Action<object, object, object, object, object, object, object, object, object, object, object>((a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11) => { object[] cargs = ConvertArgsFromNLua(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11); caller.TriggerLocalEvent(eventname, cargs[0], cargs[1], cargs[2], cargs[3], cargs[4], cargs[5], cargs[6], cargs[7], cargs[8], cargs[9], cargs[10]); }),
+                    new Action<object, object, object, object, object, object, object, object, object, object, object, object>((a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12) => { object[] cargs = ConvertArgsFromNLua(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12); caller.TriggerLocalEvent(eventname, cargs[0], cargs[1], cargs[2], cargs[3], cargs[4], cargs[5], cargs[6], cargs[7], cargs[8], cargs[9], cargs[10], cargs[11]); }),
+                    new Action<object, object, object, object, object, object, object, object, object, object, object, object, object>((a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13) => { object[] cargs = ConvertArgsFromNLua(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13); caller.TriggerLocalEvent(eventname, cargs[0], cargs[1], cargs[2], cargs[3], cargs[4], cargs[5], cargs[6], cargs[7], cargs[8], cargs[9], cargs[10], cargs[11], cargs[12]); }),
+                    new Action<object, object, object, object, object, object, object, object, object, object, object, object, object, object>((a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14) => { object[] cargs = ConvertArgsFromNLua(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14); caller.TriggerLocalEvent(eventname, cargs[0], cargs[1], cargs[2], cargs[3], cargs[4], cargs[5], cargs[6], cargs[7], cargs[8], cargs[9], cargs[10], cargs[11], cargs[12], cargs[13]); }),
+                    new Action<object, object, object, object, object, object, object, object, object, object, object, object, object, object, object>((a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15) => { object[] cargs = ConvertArgsFromNLua(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15); caller.TriggerLocalEvent(eventname, cargs[0], cargs[1], cargs[2], cargs[3], cargs[4], cargs[5], cargs[6], cargs[7], cargs[8], cargs[9], cargs[10], cargs[11], cargs[12], cargs[13], cargs[14]); }),
+                    new Action<object, object, object, object, object, object, object, object, object, object, object, object, object, object, object, object>((a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16) => { object[] cargs = ConvertArgsFromNLua(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16); caller.TriggerLocalEvent(eventname, cargs[0], cargs[1], cargs[2], cargs[3], cargs[4], cargs[5], cargs[6], cargs[7], cargs[8], cargs[9], cargs[10], cargs[11], cargs[12], cargs[13], cargs[14], cargs[15]); })
+                };
 
                 foreach (Delegate handler in handlers)
                 {
@@ -515,6 +645,111 @@ namespace ServerWrapper
                     AddEventHandler(eventname, handler);
                 }
             }
+        }
+
+        internal static object[] ConvertArgsFromNLua(params object[] args)
+        {
+            List<object> Converted = new List<object>();
+
+            foreach(object arg in args)
+            {
+                Type type = arg.GetType();
+
+                if(type == typeof(Neo.IronLua.LuaTable))
+                {
+                    Neo.IronLua.LuaTable table = (Neo.IronLua.LuaTable)arg;
+
+                    bool dict = false;
+                    for (int i = 1; i < table.Values.Keys.Count + 1; i++)
+                    {
+                        if (table.Values.Keys.ElementAt(i - 1).ToString() != i.ToString())
+                        {
+                            dict = true;
+
+                            break;
+                        }
+                    }
+
+                    if (!dict)
+                    {
+                        List<object> tvalues = new List<object>();
+                        foreach (object o in table.Values.Values) tvalues.Add(ConvertArgsFromNLua(o)[0]);
+
+                        Converted.Add(tvalues);
+                    }
+                    else
+                    {
+                        Dictionary<object, object> tvalues = new Dictionary<object, object>();
+                        foreach (var kv in table.Values) tvalues.Add(ConvertArgsFromNLua(kv.Key)[0], ConvertArgsFromNLua(kv.Value)[0]);
+
+                        Converted.Add(tvalues);
+                    }
+
+                    continue;
+                }
+
+                if (type.ToString().StartsWith("Neo.IronLua")) instance.Print("ServerWrapper: Conversation required for " + type + "!");
+
+                Converted.Add(arg);
+            }
+
+            return Converted.ToArray();
+        }
+
+        private static readonly Type[] WriteTypes = new[] {
+            typeof(string), typeof(DateTime), typeof(Enum), 
+            typeof(decimal), typeof(Guid),
+        };
+
+        internal static object[] ConvertArgsToNLua(params object[] args)
+        {
+            List<object> Converted = new List<object>();
+
+            foreach (object arg in args)
+            {
+                Type type = arg.GetType();
+
+                if (type.IsPrimitive || WriteTypes.Contains(type))
+                {
+                    Converted.Add(arg);
+
+                    continue;
+                }
+                else if (type.GetInterfaces().Contains(typeof(IDictionary)))
+                {
+                    IDictionary dict = (IDictionary)arg;
+                    Neo.IronLua.LuaTable table = new Neo.IronLua.LuaTable();
+                    foreach (object key in dict.Keys) Neo.IronLua.LuaTable.insert(table, ConvertArgsToNLua(key)[0], ConvertArgsToNLua(dict[key])[0]);
+
+                    Converted.Add(table);
+
+                    continue;
+                }
+                else if (type.GetInterfaces().Contains(typeof(IList)))
+                {
+                    IList list = (IList)arg;
+                    Neo.IronLua.LuaTable table = new Neo.IronLua.LuaTable();
+                    foreach (object o in list) Neo.IronLua.LuaTable.insert(table, ConvertArgsToNLua(o)[0]);
+
+                    Converted.Add(table);
+
+                    continue;
+                }
+                else if (type.GetInterfaces().Contains(typeof(IEnumerable)))
+                {
+                    IEnumerable enumerable = (IEnumerable)arg;
+                    Neo.IronLua.LuaTable table = new Neo.IronLua.LuaTable();
+                    foreach (object o in enumerable) Neo.IronLua.LuaTable.insert(table, ConvertArgsToNLua(o)[0]);
+
+                    Converted.Add(table);
+
+                    continue;
+                }
+
+                Converted.Add(arg);
+            }
+
+            return Converted.ToArray();
         }
 
         private void AddEventHandler(string eventname, Delegate eventhandler)

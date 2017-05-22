@@ -7,7 +7,8 @@ using System.Linq;
 
 namespace ServerWrapper
 {
-    public struct Player
+    //public struct Player
+    public class Player : MarshalByRefObject // For some reason on some machines this class being a struct throws an exception.
     {
         Client c;
 
@@ -271,7 +272,7 @@ namespace ServerWrapper
                 }
                 catch (Exception e)
                 {
-                    RconPrint("Error executing event handler for event " + eventname + " in resource ServerWrapper (" + Name + "): \n");
+                    w.RconPrint("Error executing event handler for event " + eventname + " in resource ServerWrapper (" + Name + "): \n");
                     w.PrintException(e);
 
                     //EventHandlers[eventname].Clear();
