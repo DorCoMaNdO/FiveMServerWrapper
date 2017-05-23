@@ -19,16 +19,16 @@ namespace ServerWrapper
 
         private static Assembly serverasm = null;
 
-        private static Type LogScriptFunctions = null, RconScriptFunctions = null, PlayerScriptFunctions = null, EventScriptFunctions = null, ScriptEnvironment = null, ClientInstances = null;
-        internal static Type ScriptEnvironmentScriptTimer = null;
-        internal static PropertyInfo ScriptEnvironmentScriptTimerFunction = null, ScriptEnvironmentScriptTimerTickFrom = null;
-        internal static IList ScriptEnvironmentScriptTimerList = null;
-        private static MethodInfo LogScriptFunctionsPrint = null, RconScriptFunctionsRconPrint = null, PlayerScriptFunctionsDropPlayer = null, PlayerScriptFunctionsTempBanPlayer = null, PlayerScriptFunctionsGetHostId = null, EventScriptFunctionsTriggerClientEvent = null, EventScriptFunctionsRegisterServerEvent = null, EventScriptFunctionsTriggerEvent = null, EventScriptFunctionsCancelEvent = null, EventScriptFunctionsWasEventCanceled = null, ScriptEnvironmentSetTimeout = null, ScriptEnvironmentAddEventHandler = null, ScriptEnvironmentGetInstanceId = null;
-
-        internal Type scriptEnvironmentScriptTimer { get { return ScriptEnvironmentScriptTimer; } }
-        internal PropertyInfo scriptEnvironmentScriptTimerFunction { get { return ScriptEnvironmentScriptTimerFunction; } }
-        internal PropertyInfo scriptEnvironmentScriptTimerTickFrom { get { return ScriptEnvironmentScriptTimerTickFrom; } }
-        internal IList scriptEnvironmentScriptTimerList { get { return ScriptEnvironmentScriptTimerList; } }
+        private static Type LogScriptFunctions = null, RconScriptFunctions = null, PlayerScriptFunctions = null, EventScriptFunctions = null, ScriptEnvironment = null, ClientInstances = null, ResourceScriptFunctions = null;
+        internal static Type SEScriptTimer = null;
+        internal static PropertyInfo SEScriptTimerFunction = null, SEScriptTimerTickFrom = null;
+        internal static IList SEScriptTimerList = null;
+        private static MethodInfo LSFPrint = null;
+        private static MethodInfo RconSFRconPrint = null;
+        private static MethodInfo PSFDropPlayer = null, PSFTempBanPlayer = null, PSFGetHostId = null;
+        private static MethodInfo ESFTriggerClientEvent = null, ESFRegisterServerEvent = null, ESFTriggerEvent = null, ESFCancelEvent = null, ESFWasEventCanceled = null;
+        private static MethodInfo SESetTimeout = null, SEAddEventHandler = null, SEGetInstanceId = null;
+        private static MethodInfo /*RSFGetInvokingResource = null,*/ RSFStopResource = null, RSFStartResource = null, RSFSetGameType = null, RSFSetMapName = null;
 
         internal static ReadOnlyDictionary<string, Client> Clients { get; private set; }
         internal static ReadOnlyDictionary<ushort, Client> ClientsByNetId { get; private set; }
@@ -70,55 +70,55 @@ namespace ServerWrapper
 
                 if (LogScriptFunctions != null)
                 {
-                    LogScriptFunctionsPrint = LogScriptFunctions.GetMethod("Print_f", BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public);
+                    LSFPrint = LogScriptFunctions.GetMethod("Print_f", BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public);
                 }
 
                 RconScriptFunctions = serverasm.GetType("CitizenMP.Server.Resources.RconScriptFunctions");
 
                 if (RconScriptFunctions != null)
                 {
-                    RconScriptFunctionsRconPrint = RconScriptFunctions.GetMethod("RconPrint_f", BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public);
+                    RconSFRconPrint = RconScriptFunctions.GetMethod("RconPrint_f", BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public);
                 }
 
                 PlayerScriptFunctions = serverasm.GetType("CitizenMP.Server.Resources.PlayerScriptFunctions");
 
                 if (PlayerScriptFunctions != null)
                 {
-                    PlayerScriptFunctionsDropPlayer = PlayerScriptFunctions.GetMethod("DropPlayer", BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public);
-                    PlayerScriptFunctionsTempBanPlayer = PlayerScriptFunctions.GetMethod("TempBanPlayer", BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public);
-                    PlayerScriptFunctionsGetHostId = PlayerScriptFunctions.GetMethod("GetHostId", BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public);
+                    PSFDropPlayer = PlayerScriptFunctions.GetMethod("DropPlayer", BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public);
+                    PSFTempBanPlayer = PlayerScriptFunctions.GetMethod("TempBanPlayer", BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public);
+                    PSFGetHostId = PlayerScriptFunctions.GetMethod("GetHostId", BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public);
                 }
 
                 EventScriptFunctions = serverasm.GetType("CitizenMP.Server.Resources.EventScriptFunctions");
 
                 if (EventScriptFunctions != null)
                 {
-                    EventScriptFunctionsTriggerClientEvent = EventScriptFunctions.GetMethod("TriggerClientEvent_f", BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public);
-                    EventScriptFunctionsRegisterServerEvent = EventScriptFunctions.GetMethod("RegisterServerEvent_f", BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public);
-                    EventScriptFunctionsTriggerEvent = EventScriptFunctions.GetMethod("TriggerEvent_f", BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public);
-                    EventScriptFunctionsCancelEvent = EventScriptFunctions.GetMethod("CancelEvent_f", BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public);
-                    EventScriptFunctionsWasEventCanceled = EventScriptFunctions.GetMethod("WasEventCanceled_f", BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public);
+                    ESFTriggerClientEvent = EventScriptFunctions.GetMethod("TriggerClientEvent_f", BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public);
+                    ESFRegisterServerEvent = EventScriptFunctions.GetMethod("RegisterServerEvent_f", BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public);
+                    ESFTriggerEvent = EventScriptFunctions.GetMethod("TriggerEvent_f", BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public);
+                    ESFCancelEvent = EventScriptFunctions.GetMethod("CancelEvent_f", BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public);
+                    ESFWasEventCanceled = EventScriptFunctions.GetMethod("WasEventCanceled_f", BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public);
                 }
 
                 ScriptEnvironment = serverasm.GetType("CitizenMP.Server.Resources.ScriptEnvironment");
 
                 if (ScriptEnvironment != null)
                 {
-                    ScriptEnvironmentSetTimeout = ScriptEnvironment.GetMethod("SetTimeout_f", BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public);
-                    ScriptEnvironmentAddEventHandler = ScriptEnvironment.GetMethod("AddEventHandler_f", BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public);
-                    ScriptEnvironmentGetInstanceId = ScriptEnvironment.GetMethod("GetInstanceId", BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public);
+                    SESetTimeout = ScriptEnvironment.GetMethod("SetTimeout_f", BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public);
+                    SEAddEventHandler = ScriptEnvironment.GetMethod("AddEventHandler_f", BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public);
+                    SEGetInstanceId = ScriptEnvironment.GetMethod("GetInstanceId", BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public);
 
                     object CurrentEnvironmentInstance = ScriptEnvironment.GetProperty("CurrentEnvironment", BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public).GetValue(null);
                     EventHandlers = (Dictionary<string, List<Delegate>>)ScriptEnvironment.GetField("m_eventHandlers", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public).GetValue(CurrentEnvironmentInstance);
 
-                    ScriptEnvironmentScriptTimer = ScriptEnvironment.GetNestedType("ScriptTimer", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+                    SEScriptTimer = ScriptEnvironment.GetNestedType("ScriptTimer", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
 
-                    if (ScriptEnvironmentScriptTimer != null)
+                    if (SEScriptTimer != null)
                     {
-                        ScriptEnvironmentScriptTimerList = (IList)ScriptEnvironment.GetField("m_timers", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public).GetValue(CurrentEnvironmentInstance);
+                        SEScriptTimerList = (IList)ScriptEnvironment.GetField("m_timers", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public).GetValue(CurrentEnvironmentInstance);
 
-                        ScriptEnvironmentScriptTimerFunction = ScriptEnvironmentScriptTimer.GetProperty("Function", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
-                        ScriptEnvironmentScriptTimerTickFrom = ScriptEnvironmentScriptTimer.GetProperty("TickFrom", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+                        SEScriptTimerFunction = SEScriptTimer.GetProperty("Function", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+                        SEScriptTimerTickFrom = SEScriptTimer.GetProperty("TickFrom", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
                     }
                 }
 
@@ -129,6 +129,31 @@ namespace ServerWrapper
                     Clients = (ReadOnlyDictionary<string, Client>)ClientInstances.GetProperty("Clients", BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public).GetValue(null);
                     ClientsByNetId = (ReadOnlyDictionary<ushort, Client>)ClientInstances.GetProperty("ClientsByNetId", BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public).GetValue(null);
                 }
+
+                ResourceScriptFunctions = serverasm.GetType("CitizenMP.Server.Resources.ResourceScriptFunctions");
+
+                if (ResourceScriptFunctions != null)
+                {
+                    //RSFGetInvokingResource = ScriptEnvironment.GetMethod("GetInvokingResource_f", BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public);
+                    RSFStopResource = ScriptEnvironment.GetMethod("StopResource_f", BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public);
+                    RSFStartResource = ScriptEnvironment.GetMethod("StartResource_f", BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public);
+                    RSFSetGameType = ScriptEnvironment.GetMethod("SetGameType_f", BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public);
+                    RSFSetMapName = ScriptEnvironment.GetMethod("SetMapName_f", BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public);
+                }
+
+                /*foreach (Type t in serverasm.GetTypes())
+                {
+                    foreach (MethodInfo mi in t.GetMethods(BindingFlags.Instance | BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public))
+                    {
+                        foreach (object attr in mi.GetCustomAttributes())
+                        {
+                            if (attr.GetType().ToString().Contains("LuaMember"))
+                            {
+                                instance.RconPrint(t + " (" + mi.ReturnType + ") " + mi.Name, string.Join(", ", mi.GetParameters().Select(pi => "(" + pi.ParameterType + ") " + pi.Name)));
+                            }
+                        }
+                    }
+                }*/
             }
 
             ScriptsFolder = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "resources", "ServerWrapper", "Scripts");
@@ -162,35 +187,40 @@ namespace ServerWrapper
 
             Load(ScriptsFolder);
 
-            instance.AddEventHandler("rconCommand", new Action<string, object>((command, args)=>
+            instance.AddEventHandler("rconCommand", new Action<string, object>((command, args) =>
             {
-                if (command == "reloadscripts")
+                string c = command.ToLower();
+
+                if (c == "reloadscripts")
                 {
                     instance.CancelEvent();
 
                     if (_scripts.Count > 0) Reload(ScriptsFolder);
                 }
-                else if (command == "loadscripts")
+                else if (c == "loadscripts")
                 {
                     instance.CancelEvent();
 
                     if (_scripts.Count == 0) Load(ScriptsFolder);
                 }
-                else if (command == "unloadscripts")
+                else if (c == "unloadscripts")
                 {
                     instance.CancelEvent();
 
                     if (_scripts.Count > 0) Unload(ScriptsFolder);
                 }
-                else if (command == "swupdate")
+                else if (c == "swupdate")
                 {
                     instance.CancelEvent();
 
                     Process.Start("explorer.exe", "https://forum.fivem.net/t/release-c-net-wrapper-for-server-side-scripts/20325");
                 }
+                else
+                {
+                    lock (scripteventhandlers) foreach (IServerScript script in scripteventhandlers.Keys) if (scripteventhandlers[script].ContainsKey("rconCommand")) foreach (Delegate handler in scripteventhandlers[script]["rconCommand"]) handler.DynamicInvoke(command, args);
+                }
 
-                /*object[] converted = ConvertArgsFromNLua(args);
-                new Action<string, List<object>>((c, a) =>
+                /*new Action<string, List<object>>((c, a) =>
                 {
                     if (c == "reloadscripts")
                     {
@@ -216,10 +246,9 @@ namespace ServerWrapper
 
                         Process.Start("explorer.exe", "https://forum.fivem.net/t/release-c-net-wrapper-for-server-side-scripts/20325");
                     }
-                })(command, (List<object>)converted[0]);*/
+                })(command, (List<object>)ConvertArgsFromNLua(args)[0]);*/
             }));
 
-            instance.TriggerClientEvent("chatMessage", -1, "", new[] { 255, 255, 255 }, "test.");
 
             new Thread(() =>
             {
@@ -255,13 +284,13 @@ namespace ServerWrapper
                             }
                         }
 
-                        if(update)
+                        if (update)
                         {
                             instance.RconPrint("ServerWrapper: ---------------------------------------------------------------------------------------------------");
                             instance.RconPrint("ServerWrapper: An update to ServerWrapper is available!");
                             instance.RconPrint("ServerWrapper: Current version: " + current + ", latest version: " + latest + ".");
                             instance.RconPrint("ServerWrapper: For more info, visit https://forum.fivem.net/t/release-c-net-wrapper-for-server-side-scripts/20325.");
-                            instance.RconPrint("ServerWrapper: Or enter the command \"swupdate\" to open the link above in your default browser.");
+                            instance.RconPrint("ServerWrapper: Enter the command \"swupdate\" to open the link above in your default browser.");
                             instance.RconPrint("ServerWrapper: ---------------------------------------------------------------------------------------------------");
                         }
                     }
@@ -279,7 +308,7 @@ namespace ServerWrapper
         internal void PrintException(Exception e)
         {
             string msg = e.ToString();
-            while(e.InnerException != null)
+            while (e.InnerException != null)
             {
                 msg += "\r\n" + e.InnerException.ToString();
 
@@ -310,13 +339,68 @@ namespace ServerWrapper
                 }
             }
 
+            /*if (Directory.GetFiles(path, "*.cs").Length > 0)
+            {
+                string localassembly = typeof(ServerScript).Assembly.Location;
+                AppDomain domain = AppDomain.CreateDomain("Test");
+                domain.DoCallBack(() =>
+                {
+                    System.CodeDom.Compiler.CompilerParameters options = new System.CodeDom.Compiler.CompilerParameters();
+                    options.CompilerOptions = "/optimize /unsafe";
+                    options.GenerateInMemory = true;
+                    //options.GenerateInMemory = false;
+                    options.IncludeDebugInformation = true;
+                    options.ReferencedAssemblies.AddRange(new string[]
+                    {
+                        "System.dll",
+                        "System.Core.dll",
+                        "System.Drawing.dll",
+                        "System.Windows.Forms.dll",
+                        "System.XML.dll",
+                        "System.XML.Linq.dll",
+                        localassembly,
+                        "System.ComponentModel.Composition.dll"
+                    });
+
+                    System.CodeDom.Compiler.CodeDomProvider compiler = new Microsoft.CSharp.CSharpCodeProvider();
+
+                    foreach (string file in Directory.GetFiles(path, "*.cs"))
+                    {
+                        options.OutputAssembly = Path.ChangeExtension(file, ".dll");
+
+                        System.CodeDom.Compiler.CompilerResults result = compiler.CompileAssemblyFromFile(options, file);
+
+                        if (!result.Errors.HasErrors)
+                        {
+                            instance.RconPrint((result.CompiledAssembly == null).ToString());
+                            instance.RconPrint(result.PathToAssembly);
+                        }
+                        else
+                        {
+                            string errors = "";
+
+                            foreach (System.CodeDom.Compiler.CompilerError error in result.Errors) errors += "   at line " + error.Line + ": " + error.ErrorText + "\r\n";
+
+                            instance.RconPrint("[ERROR] Failed to compile '" + Path.GetFileName(file) + "' with " + result.Errors.Count + " error(s):\r\n" + errors.ToString());
+                        }
+                    }
+                });
+
+                AppDomain.Unload(domain);
+            }*/
+
             MefLoader mefLoader = SeparateAppDomain.CreateInstance<MefLoader>(path, path);
 
-            mefLoader.Domain.UnhandledException += (sender, e) => 
+            mefLoader.Domain.UnhandledException += (sender, e) =>
             {
                 instance.RconPrint("ServerWrapper: Unhandled exception occured in script.");
                 instance.PrintException((Exception)e.ExceptionObject);
             };
+
+            /*mefLoader.Domain.AssemblyResolve += (sender, e) =>
+            {
+
+            };*/
 
             List<IServerScript> scripts = mefLoader.Load<IServerScript>();
 
@@ -456,18 +540,29 @@ namespace ServerWrapper
             {
                 foreach (ScriptTimer st in timers.Where(st => st.caller == script)) st.Dispose();
 
-                if (scripteventhandlers.ContainsKey(script))
+                lock (scripteventhandlers)
                 {
-                    foreach (string eventname in scripteventhandlers[script].Keys)
+                    if (scripteventhandlers.ContainsKey(script))
                     {
-                        instance.RemoveAllEventHandlers((ServerScript)script, eventname);
+                        foreach (string eventname in scripteventhandlers[script].Keys)
+                        {
+                            try
+                            {
+                                instance.RemoveAllEventHandlers((ServerScript)script, eventname);
 
-                        ((ServerScript)script).RemoveAllEventHandlers(eventname);
+                                ((ServerScript)script).RemoveAllEventHandlers(eventname);
+                            }
+                            catch (Exception e)
+                            {
+                                instance.RconPrint("ServerWrapper: Failed to remove \"" + script.Name + "\"'s event handlers for event \"" + eventname + "\".");
+                                instance.PrintException(e);
+                            }
+                        }
+
+                        scripteventhandlers[script].Clear();
+
+                        scripteventhandlers.Remove(script);
                     }
-
-                    scripteventhandlers[script].Clear();
-
-                    scripteventhandlers.Remove(script);
                 }
 
                 ScriptTimer t = ((ServerScript)script).timer;
@@ -484,7 +579,7 @@ namespace ServerWrapper
                 }
             }
 
-            scripteventhandlers.Clear();
+            lock (scripteventhandlers) scripteventhandlers.Clear();
             //assemblies.Clear();
 
             if (oldAppDomain != null) AppDomain.Unload(oldAppDomain);
@@ -492,12 +587,17 @@ namespace ServerWrapper
 
         internal void Print(params object[] args)
         {
-            if (LogScriptFunctionsPrint != null) LogScriptFunctionsPrint.Invoke(null, new object[] { args });
+            if (LSFPrint != null) LSFPrint.Invoke(null, new object[] { args });
         }
 
-        internal void RconPrint(string str)
+        /*internal void RconPrint(string str)
         {
-            if (RconScriptFunctionsRconPrint != null) RconScriptFunctionsRconPrint.Invoke(null, new object[] { str });
+            if (RSFRconPrint != null) RSFRconPrint.Invoke(null, new object[] { str });
+        }*/
+
+        internal void RconPrint(params object[] args)
+        {
+            if (RconSFRconPrint != null) RconSFRconPrint.Invoke(null, new object[] { string.Join(" ", args) });
         }
 
         internal ushort[] GetPlayers()
@@ -507,52 +607,52 @@ namespace ServerWrapper
 
         internal string GetPlayerName(int ID)
         {
-            Player c = GetPlayerFromID(ID);
+            Player p = GetPlayerFromID(ID);
 
-            return c.Name;
+            return p.Name;
         }
 
         internal IEnumerable<string> GetPlayerIdentifiers(int ID)
         {
-            Player c = GetPlayerFromID(ID);
+            Player p = GetPlayerFromID(ID);
 
-            return c.Identifiers;
+            return p.Identifiers;
         }
 
         internal int GetPlayerPing(int ID)
         {
-            Player c = GetPlayerFromID(ID);
+            Player p = GetPlayerFromID(ID);
 
-            return c.Ping;
+            return p.Ping;
         }
 
         internal string GetPlayerEP(int ID)
         {
-            Player c = GetPlayerFromID(ID);
+            Player p = GetPlayerFromID(ID);
 
-            return c.RemoteEP.ToString();
+            return p.RemoteEP.ToString();
         }
 
         internal double GetPlayerLastMsg(int ID)
         {
-            Player c = GetPlayerFromID(ID);
+            Player p = GetPlayerFromID(ID);
 
-            return Time.CurrentTime - c.LastSeen;
+            return Time.CurrentTime - p.LastSeen;
         }
 
         internal int GetHostID()
         {
-            return PlayerScriptFunctions != null ? (int)PlayerScriptFunctionsGetHostId.Invoke(null, new object[] { }) : -1;
+            return PlayerScriptFunctions != null ? (int)PSFGetHostId.Invoke(null, new object[] { }) : -1;
         }
 
         internal void DropPlayer(int ID, string reason)
         {
-            if (PlayerScriptFunctionsDropPlayer != null) PlayerScriptFunctionsDropPlayer.Invoke(null, new object[] { ID, reason });
+            if (PSFDropPlayer != null) PSFDropPlayer.Invoke(null, new object[] { ID, reason });
         }
 
         internal void TempBanPlayer(int ID, string reason)
         {
-            if (PlayerScriptFunctionsTempBanPlayer != null) PlayerScriptFunctionsTempBanPlayer.Invoke(null, new object[] { ID, reason });
+            if (PSFTempBanPlayer != null) PSFTempBanPlayer.Invoke(null, new object[] { ID, reason });
         }
 
         internal Player GetPlayerFromID(int ID)
@@ -562,28 +662,28 @@ namespace ServerWrapper
 
         internal void TriggerClientEvent(string eventname, int netID, params object[] args)
         {
-            if (EventScriptFunctionsTriggerClientEvent != null) EventScriptFunctionsTriggerClientEvent.Invoke(null, new object[] { eventname, netID, ConvertArgsToNLua(args) });
+            if (ESFTriggerClientEvent != null) ESFTriggerClientEvent.Invoke(null, new object[] { eventname, netID, ConvertArgsToNLua(args) });
         }
         internal void RegisterServerEvent(string eventname)
         {
-            if (EventScriptFunctionsRegisterServerEvent != null) EventScriptFunctionsRegisterServerEvent.Invoke(null, new object[] { eventname });
+            if (ESFRegisterServerEvent != null) ESFRegisterServerEvent.Invoke(null, new object[] { eventname });
         }
 
         internal bool TriggerEvent(string eventname, params object[] args)
         {
-            if (EventScriptFunctionsTriggerEvent != null) return (bool)EventScriptFunctionsTriggerEvent.Invoke(null, new object[] { eventname, ConvertArgsToNLua(args) });
+            if (ESFTriggerEvent != null) return (bool)ESFTriggerEvent.Invoke(null, new object[] { eventname, ConvertArgsToNLua(args) });
 
             return false;
         }
 
         internal void CancelEvent()
         {
-            if (EventScriptFunctionsCancelEvent != null) EventScriptFunctionsCancelEvent.Invoke(null, new object[] { });
+            if (ESFCancelEvent != null) ESFCancelEvent.Invoke(null, new object[] { });
         }
 
         internal bool WasEventCanceled()
         {
-            if (EventScriptFunctionsWasEventCanceled != null) return (bool)EventScriptFunctionsWasEventCanceled.Invoke(null, new object[] { });
+            if (ESFWasEventCanceled != null) return (bool)ESFWasEventCanceled.Invoke(null, new object[] { });
 
             return false;
         }
@@ -642,7 +742,7 @@ namespace ServerWrapper
 
                     scripteventhandlers[icaller][eventname].Add(handler);
 
-                    AddEventHandler(eventname, handler);
+                    if (eventname != "rconCommand") AddEventHandler(eventname, handler);
                 }
             }
         }
@@ -651,18 +751,18 @@ namespace ServerWrapper
         {
             List<object> Converted = new List<object>();
 
-            foreach(object arg in args)
+            foreach (object arg in args)
             {
                 Type type = arg.GetType();
 
-                if(type == typeof(Neo.IronLua.LuaTable))
+                if (type == typeof(Neo.IronLua.LuaTable))
                 {
                     Neo.IronLua.LuaTable table = (Neo.IronLua.LuaTable)arg;
 
                     bool dict = false;
-                    for (int i = 1; i < table.Values.Keys.Count + 1; i++)
+                    for (int i = 0; i < table.Values.Keys.Count; i++)
                     {
-                        if (table.Values.Keys.ElementAt(i - 1).ToString() != i.ToString())
+                        if (table.Values.Keys.ElementAt(i).ToString() != (i + 1).ToString())
                         {
                             dict = true;
 
@@ -696,9 +796,13 @@ namespace ServerWrapper
             return Converted.ToArray();
         }
 
-        private static readonly Type[] WriteTypes = new[] {
-            typeof(string), typeof(DateTime), typeof(Enum), 
-            typeof(decimal), typeof(Guid),
+        private static readonly Type[] WriteTypes = new Type[]
+        {
+            typeof(string),
+            typeof(DateTime),
+            typeof(Enum), 
+            typeof(decimal),
+            typeof(Guid),
         };
 
         internal static object[] ConvertArgsToNLua(params object[] args)
@@ -708,6 +812,7 @@ namespace ServerWrapper
             foreach (object arg in args)
             {
                 Type type = arg.GetType();
+                Type[] interfaces = type.GetInterfaces();
 
                 if (type.IsPrimitive || WriteTypes.Contains(type))
                 {
@@ -715,7 +820,7 @@ namespace ServerWrapper
 
                     continue;
                 }
-                else if (type.GetInterfaces().Contains(typeof(IDictionary)))
+                else if (interfaces.Contains(typeof(IDictionary)))
                 {
                     IDictionary dict = (IDictionary)arg;
                     Neo.IronLua.LuaTable table = new Neo.IronLua.LuaTable();
@@ -725,7 +830,7 @@ namespace ServerWrapper
 
                     continue;
                 }
-                else if (type.GetInterfaces().Contains(typeof(IList)))
+                else if (interfaces.Contains(typeof(IList)))
                 {
                     IList list = (IList)arg;
                     Neo.IronLua.LuaTable table = new Neo.IronLua.LuaTable();
@@ -735,7 +840,7 @@ namespace ServerWrapper
 
                     continue;
                 }
-                else if (type.GetInterfaces().Contains(typeof(IEnumerable)))
+                else if (interfaces.Contains(typeof(IEnumerable)))
                 {
                     IEnumerable enumerable = (IEnumerable)arg;
                     Neo.IronLua.LuaTable table = new Neo.IronLua.LuaTable();
@@ -754,7 +859,7 @@ namespace ServerWrapper
 
         private void AddEventHandler(string eventname, Delegate eventhandler)
         {
-            if (ScriptEnvironmentAddEventHandler != null) ScriptEnvironmentAddEventHandler.Invoke(null, new object[] { eventname, eventhandler });
+            if (SEAddEventHandler != null) SEAddEventHandler.Invoke(null, new object[] { eventname, eventhandler });
         }
 
         internal void RemoveAllEventHandlers(ServerScript caller, string eventname)
@@ -773,12 +878,32 @@ namespace ServerWrapper
 
         internal int GetInstanceID()
         {
-            return ScriptEnvironmentGetInstanceId != null ? (int)ScriptEnvironmentGetInstanceId.Invoke(null, new object[] { }) : -1;
+            return SEGetInstanceId != null ? (int)SEGetInstanceId.Invoke(null, new object[] { }) : -1;
         }
 
-        public override object InitializeLifetimeService()
+        /*internal string GetInvokingResource()
         {
-            return null;
+            return RSFGetInvokingResource != null ? (string)RSFGetInvokingResource.Invoke(null, new object[] { }) : null;
+        }*/
+
+        internal bool StopResource(string resourceName)
+        {
+            return RSFStopResource != null && resourceName != "ServerWrapper" ? (bool)RSFStopResource.Invoke(null, new object[] { resourceName }) : false;
+        }
+
+        internal bool StartResource(string resourceName)
+        {
+            return RSFStartResource != null && resourceName != "ServerWrapper" ? (bool)RSFStartResource.Invoke(null, new object[] { resourceName }) : false;
+        }
+
+        internal void SetGameType(string gameType)
+        {
+            if (RSFSetGameType != null) RSFSetGameType.Invoke(null, new object[] { gameType });
+        }
+
+        internal void SetMapName(string mapName)
+        {
+            if (RSFSetMapName != null) RSFSetMapName.Invoke(null, new object[] { mapName });
         }
     }
 }

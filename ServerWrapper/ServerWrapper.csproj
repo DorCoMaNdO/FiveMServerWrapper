@@ -55,6 +55,7 @@
     <Reference Include="CitizenMP.Server">
       <HintPath>..\..\..\..\..\Program Files\FiveM\cfx-server\CitizenMP.Server.exe</HintPath>
     </Reference>
+    <Reference Include="Microsoft.CSharp" />
     <Reference Include="Neo.Lua">
       <HintPath>..\packages\NeoLua.1.2.20\lib\net45\Neo.Lua.dll</HintPath>
     </Reference>
@@ -68,6 +69,7 @@
   <ItemGroup>
     <Compile Include="IServerScript.cs" />
     <Compile Include="MefLoader.cs" />
+    <Compile Include="Player.cs" />
     <Compile Include="ScriptTimer.cs" />
     <Compile Include="SeparateAppDomain.cs" />
     <Compile Include="ServerScript.cs" />

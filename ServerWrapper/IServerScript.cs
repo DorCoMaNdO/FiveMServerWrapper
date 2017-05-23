@@ -9,6 +9,7 @@ namespace ServerWrapper
         ReadOnlyCollection<string> Dependencies { get; }
 
         void Load();
+
         void Unload();
 
         void Tick();

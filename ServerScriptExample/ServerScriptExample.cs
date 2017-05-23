@@ -17,7 +17,7 @@ namespace ServerScriptExample
 
         public override void Load()
         {
-            Interval = 1000; // Tick() interval in ms (likely delayed somewhat with reflection, do not rely on tick timings to be accurate)
+            Interval = 10000; // Tick() interval in ms (likely delayed somewhat with reflection, do not rely on tick timings to be accurate)
 
             //TickTimer = false; // Disable the Tick() timer
 
@@ -61,6 +61,19 @@ namespace ServerScriptExample
             }));
             TriggerEvent("CSharpEventDictTest", new Dictionary<string, object>() { { "Example Argument 1", "Example Value 1" }, { "Example Argument 2", "Example Value 2" } });
 
+            RegisterServerEvent("CSharpEventDelegateTest");
+            AddEventHandler("CSharpEventDelegateTest", new Action<Delegate>((d) => // Delegates will only be passed to ServerWrapper scripts, lua scripts recieve a Guid identifier.
+            {
+                Print("CSharpEventDelegateTest has been raised - " + d.GetType());
+
+                //d.DynamicInvoke("Example callback message");
+                if (d.GetType() == typeof(Action<string>))
+                {
+                    ((Action<string>)d)("Example callback message");
+                }
+            }));
+            TriggerEvent("CSharpEventDelegateTest", new Action<string>((msg) => { Print("CSharpEventDelegateTest callback - " + msg); }));
+
             AddEventHandler("rconCommand", new Action<string, List<object>>((command, args) =>
             {
                 //Print("Command: \"" + command + "\", Args: " + string.Join(",", args));
@@ -100,8 +113,10 @@ namespace ServerScriptExample
         public override void Tick()
         {
             var players = Players; // get_Players returns a new copy of the ReadOnlyDictionary with every call, cache one in a variable to prevent unnecessary additional work.
-            
-            Print("Clients: " + players.Count + ", names: " + string.Join("|", players.Select(kv => kv.Value.Name)) + ", pings: " + string.Join("|", players.Select(kv => kv.Value.Ping)));
+
+            Print("Players: " + players.Count);
+            Print("Names: " + string.Join("|", players.Select(kv => kv.Value.Name)));
+            Print("Pings: " + string.Join("|", players.Select(kv => kv.Value.Ping)));
         }
     }
 }

@@ -1,53 +1,10 @@
-﻿using CitizenMP.Server;
-using CitizenMP.Server.Game;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 
 namespace ServerWrapper
 {
-    //public struct Player
-    public class Player : MarshalByRefObject // For some reason on some machines this class being a struct throws an exception.
-    {
-        Client c;
-
-        public Player(Client client)
-        {
-            c = client;
-        }
-
-        public static implicit operator Client(Player p)
-        {
-            return p.c;
-        }
-
-        public static implicit operator Player(Client c)
-        {
-            return new Player(c);
-        }
-
-        public int Base { get { return c.Base; } set { c.Base = value; } }
-        public string Guid { get { return c.Guid; } set { c.Guid = value; } }
-        public IEnumerable<string> Identifiers { get { return c.Identifiers; } set { c.Identifiers = value; } }
-        public long LastSeen { get { return c.LastSeen; } }
-        public string Name { get { return c.Name; } set { c.Name = value; } }
-        public ushort NetID { get { return c.NetID; } set { c.NetID = value; } }
-        public object NetImplData { get { return c.NetImplData; } }
-        public int Ping { get { return c.Ping; } }
-        public uint ProtocolVersion { get { return c.ProtocolVersion; } set { c.ProtocolVersion = value; } }
-        public NetEndPoint RemoteEP { get { return c.RemoteEP; } set { c.RemoteEP = value; } }
-        public bool SentData { get { return c.SentData; } set { c.SentData = value; } }
-        public NetEndPoint TempEP { get { return c.TempEP; } set { c.TempEP = value; } }
-        public int TempID { get { return c.TempID; } set { c.TempID = value; } }
-        public string Token { get { return c.Token; } set { c.Token = value; } }
-
-        public void Touch()
-        {
-            c.Touch();
-        }
-    }
-
     public abstract class ServerScript : MarshalByRefObject, IServerScript
     {
         public string Name { get; private set; }
@@ -59,9 +16,11 @@ namespace ServerWrapper
         public ReadOnlyDictionary<ushort, Player> PlayersByNetId { get { return w.PlayersByNetId; } }
 
         internal ScriptTimer timer { get; set; }
-        
+
         private Dictionary<ScriptTimer, ScriptTimerHandler> TimerHandlers = new Dictionary<ScriptTimer, ScriptTimerHandler>();
         private Dictionary<string, List<Delegate>> EventHandlers = new Dictionary<string, List<Delegate>>();
+
+        private static Dictionary<Delegate, string> DelegateReferences = new Dictionary<Delegate, string>();
 
         public int Interval { get { return timer != null ? timer.Interval : 100; } set { if (timer != null) timer.Interval = value; } }
 
@@ -84,9 +43,13 @@ namespace ServerWrapper
 
         private Wrapper w = null;
 
+        private object[] PrintPrefix;
+
         public ServerScript(string name) : base()
         {
             Name = name;
+
+            PrintPrefix = new object[] { "ServerWrapper script \"" + Name + "\":" };
 
             Dependencies = new ReadOnlyCollection<string>(dependencies);
         }
@@ -111,12 +74,17 @@ namespace ServerWrapper
 
         public void Print(params object[] args)
         {
-            if (w != null) w.Print(new object[] { "ServerWrapper script \"" + Name + "\":" }.Concat(args).ToArray());
+            if (w != null) w.Print(PrintPrefix.Concat(args).ToArray());
         }
 
-        public void RconPrint(string str)
+        /*public void RconPrint(string str)
         {
             if (w != null) w.RconPrint("ServerWrapper script \"" + Name + "\": " + str);
+        }*/
+
+        public void RconPrint(params object[] args)
+        {
+            if (w != null) w.RconPrint(PrintPrefix.Concat(args).ToArray());
         }
 
         public ushort[] GetPlayers()
@@ -182,12 +150,15 @@ namespace ServerWrapper
         {
             if (w != null) return w.GetPlayerFromID(ID);
 
-            return default(Player);
+            //return default(Player);
+            return null;
         }
 
         public void TriggerClientEvent(string eventname, int netID, params object[] args)
         {
-            if (w != null) w.TriggerClientEvent(eventname, netID, args);
+            if (w != null) w.TriggerClientEvent(eventname, netID, ConvertArgsFromLocal(args));
+
+            lock (DelegateReferences) foreach (object arg in args) if (arg.GetType().IsSubclassOf(typeof(Delegate))) if (DelegateReferences.ContainsKey((Delegate)arg)) DelegateReferences.Remove((Delegate)arg);
         }
 
         public void RegisterServerEvent(string eventname)
@@ -197,7 +168,9 @@ namespace ServerWrapper
 
         public bool TriggerEvent(string eventname, params object[] args)
         {
-            if (w != null) return w.TriggerEvent(eventname, args);
+            if (w != null) return w.TriggerEvent(eventname, ConvertArgsFromLocal(args));
+
+            lock (DelegateReferences) foreach (object arg in args) if (arg.GetType().IsSubclassOf(typeof(Delegate))) if (DelegateReferences.ContainsKey((Delegate)arg)) DelegateReferences.Remove((Delegate)arg);
 
             return false;
         }
@@ -233,7 +206,7 @@ namespace ServerWrapper
 
         public string SetTimeout(int delay, ScriptTimerHandler callback, bool loop = false)
         {
-            if(w != null)
+            if (w != null)
             {
                 ScriptTimer timer = w.CreateTimer(this, delay, loop);
 
@@ -262,6 +235,8 @@ namespace ServerWrapper
         {
             if (!EventHandlers.ContainsKey(eventname)) return;
 
+            args = ConvertArgsToLocal(args);
+
             foreach (Delegate handler in EventHandlers[eventname].ToArray())
             {
                 try
@@ -280,6 +255,67 @@ namespace ServerWrapper
                     break;
                 }
             }
+        }
+
+        internal object[] ConvertArgsToLocal(params object[] args)
+        {
+            List<object> Converted = new List<object>();
+
+            foreach (object arg in args)
+            {
+                Type type = arg.GetType();
+
+                if (type == typeof(String))
+                {
+                    string s = (string)arg;
+
+                    lock (DelegateReferences)
+                    {
+                        if (DelegateReferences.ContainsValue(s))
+                        {
+                            Delegate d = DelegateReferences.Where(kv => kv.Value == s).ElementAt(0).Key;
+
+                            //DelegateReferences.Remove(d);
+
+                            Converted.Add(d);
+
+                            continue;
+                        }
+                    }
+                }
+
+                Converted.Add(arg);
+            }
+
+            return Converted.ToArray();
+        }
+
+        internal object[] ConvertArgsFromLocal(params object[] args)
+        {
+            List<object> Converted = new List<object>();
+
+            foreach (object arg in args)
+            {
+                Type type = arg.GetType();
+
+                if (type.IsSubclassOf(typeof(Delegate)))
+                {
+                    Delegate d = (Delegate)arg;
+
+                    lock (DelegateReferences)
+                    {
+                        if (!DelegateReferences.ContainsKey(d)) DelegateReferences.Add(d, type.ToString() + "|" + Guid.NewGuid().ToString());
+
+                        Converted.Add(DelegateReferences[d]);
+                    }
+
+                    continue;
+                }
+
+                Converted.Add(arg);
+            }
+
+            return Converted.ToArray();
         }
 
         public void AddEventHandler(string eventname, Delegate eventhandler)
@@ -305,6 +341,37 @@ namespace ServerWrapper
             if (w != null) return w.GetInstanceID();
 
             return -1;
+        }
+
+        /*public string GetInvokingResource()
+        {
+            if (w != null) return w.GetInvokingResource();
+
+            return null;
+        }*/
+
+        public bool StopResource(string resourceName)
+        {
+            if (w != null) return w.StopResource(resourceName);
+
+            return false;
+        }
+
+        public bool StartResource(string resourceName)
+        {
+            if (w != null) return w.StartResource(resourceName);
+
+            return false;
+        }
+
+        public void SetGameType(string gameType)
+        {
+            if (w != null) w.SetGameType(gameType);
+        }
+
+        public void SetMapName(string mapName)
+        {
+            if (w != null) w.SetMapName(mapName);
         }
     }
 }

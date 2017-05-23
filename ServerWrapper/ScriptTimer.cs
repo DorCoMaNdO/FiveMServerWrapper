@@ -8,10 +8,10 @@ namespace ServerWrapper
 
     public class ScriptTimer : MarshalByRefObject, IDisposable
     {
-        internal readonly object ScriptEnvironmentScriptTimer = null;
+        internal readonly object SEScriptTimer = null;
 
-        private Delegate Function { get { return ScriptEnvironmentScriptTimer != null && Wrapper.ScriptEnvironmentScriptTimerFunction != null ? (Delegate)Wrapper.ScriptEnvironmentScriptTimerFunction.GetValue(ScriptEnvironmentScriptTimer) : null; } set { if (ScriptEnvironmentScriptTimer != null && Wrapper.ScriptEnvironmentScriptTimerFunction != null) Wrapper.ScriptEnvironmentScriptTimerFunction.SetValue(ScriptEnvironmentScriptTimer, value); } }
-        private long TickFrom { get { return ScriptEnvironmentScriptTimer != null && Wrapper.ScriptEnvironmentScriptTimerTickFrom != null ? (long)Wrapper.ScriptEnvironmentScriptTimerTickFrom.GetValue(ScriptEnvironmentScriptTimer) : 0; } set { if (ScriptEnvironmentScriptTimer != null && Wrapper.ScriptEnvironmentScriptTimerTickFrom != null) Wrapper.ScriptEnvironmentScriptTimerTickFrom.SetValue(ScriptEnvironmentScriptTimer, value); } }
+        private Delegate Function { get { return SEScriptTimer != null && Wrapper.SEScriptTimerFunction != null ? (Delegate)Wrapper.SEScriptTimerFunction.GetValue(SEScriptTimer) : null; } set { if (SEScriptTimer != null && Wrapper.SEScriptTimerFunction != null) Wrapper.SEScriptTimerFunction.SetValue(SEScriptTimer, value); } }
+        private long TickFrom { get { return SEScriptTimer != null && Wrapper.SEScriptTimerTickFrom != null ? (long)Wrapper.SEScriptTimerTickFrom.GetValue(SEScriptTimer) : 0; } set { if (SEScriptTimer != null && Wrapper.SEScriptTimerTickFrom != null) Wrapper.SEScriptTimerTickFrom.SetValue(SEScriptTimer, value); } }
 
         internal ScriptTimerHandler Handler = null;
 
@@ -31,7 +31,7 @@ namespace ServerWrapper
             {
                 loop = value;
 
-                lock (Wrapper.ScriptEnvironmentScriptTimerList) if (value && !Wrapper.ScriptEnvironmentScriptTimerList.Contains(this)) Start();
+                lock (Wrapper.SEScriptTimerList) if (value && !Wrapper.SEScriptTimerList.Contains(this)) Start();
             }
         }
 
@@ -39,7 +39,7 @@ namespace ServerWrapper
 
         internal ScriptTimer(ServerScript caller, int interval, ScriptTimerHandler callback, bool loop = false)
         {
-            if (Wrapper.ScriptEnvironmentScriptTimer == null || Wrapper.ScriptEnvironmentScriptTimerFunction == null || Wrapper.ScriptEnvironmentScriptTimerTickFrom == null || Wrapper.ScriptEnvironmentScriptTimerList == null) return;
+            if (Wrapper.SEScriptTimer == null || Wrapper.SEScriptTimerFunction == null || Wrapper.SEScriptTimerTickFrom == null || Wrapper.SEScriptTimerList == null) return;
 
             this.caller = caller;
 
@@ -47,7 +47,7 @@ namespace ServerWrapper
 
             lock (Wrapper.ScriptTimers) while (Wrapper.ScriptTimers.Any(st => st.ID == ID)) ID = Guid.NewGuid().ToString(); // Not taking any chances.
 
-            ScriptEnvironmentScriptTimer = AppDomain.CurrentDomain.CreateInstanceAndUnwrap(Wrapper.ScriptEnvironmentScriptTimer.Assembly.FullName, Wrapper.ScriptEnvironmentScriptTimer.FullName);
+            SEScriptTimer = AppDomain.CurrentDomain.CreateInstanceAndUnwrap(Wrapper.SEScriptTimer.Assembly.FullName, Wrapper.SEScriptTimer.FullName);
 
             Interval = interval;
 
@@ -76,14 +76,14 @@ namespace ServerWrapper
 
             lock (Wrapper.ScriptTimers) if (!Wrapper.ScriptTimers.Contains(this)) Wrapper.ScriptTimers.Add(this);
 
-            lock (Wrapper.ScriptEnvironmentScriptTimerList) Wrapper.ScriptEnvironmentScriptTimerList.Add(ScriptEnvironmentScriptTimer);
+            lock (Wrapper.SEScriptTimerList) Wrapper.SEScriptTimerList.Add(SEScriptTimer);
         }
 
         public void Cancel()
         {
             Loop = false;
 
-            lock (Wrapper.ScriptEnvironmentScriptTimerList) while (Wrapper.ScriptEnvironmentScriptTimerList.Contains(ScriptEnvironmentScriptTimer)) Wrapper.ScriptEnvironmentScriptTimerList.Remove(ScriptEnvironmentScriptTimer);
+            lock (Wrapper.SEScriptTimerList) while (Wrapper.SEScriptTimerList.Contains(SEScriptTimer)) Wrapper.SEScriptTimerList.Remove(SEScriptTimer);
 
             lock (Wrapper.ScriptTimers) Wrapper.ScriptTimers.RemoveAll(st => st == this || st.ID == ID);
         }
