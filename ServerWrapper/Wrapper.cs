@@ -13,22 +13,30 @@ using System.Threading;
 
 namespace ServerWrapper
 {
+    internal enum PrintType
+    {
+        Info,
+        Debug,
+        Warning,
+        Error,
+        Fatal
+    }
+
     internal class Wrapper : MarshalByRefObject
     {
         private static bool initialized = false;
 
         private static Assembly serverasm = null;
 
-        private static Type LogScriptFunctions = null, RconScriptFunctions = null, PlayerScriptFunctions = null, EventScriptFunctions = null, ScriptEnvironment = null, ClientInstances = null, ResourceScriptFunctions = null;
+        private static Type PlayerScriptFunctions = null, EventScriptFunctions = null, ScriptEnvironment = null, ClientInstances = null, ResourceScriptFunctions = null;
         internal static Type SEScriptTimer = null;
         internal static PropertyInfo SEScriptTimerFunction = null, SEScriptTimerTickFrom = null;
         internal static IList SEScriptTimerList = null;
-        private static MethodInfo LSFPrint = null;
-        private static MethodInfo RconSFRconPrint = null;
         private static MethodInfo PSFDropPlayer = null, PSFTempBanPlayer = null, PSFGetHostId = null;
         private static MethodInfo ESFTriggerClientEvent = null, ESFRegisterServerEvent = null, ESFTriggerEvent = null, ESFCancelEvent = null, ESFWasEventCanceled = null;
+        private static object SECurrentEnvironment = null, SELuaEnvironment = null;
         private static MethodInfo SESetTimeout = null, SEAddEventHandler = null, SEGetInstanceId = null;
-        private static MethodInfo /*RSFGetInvokingResource = null,*/ RSFStopResource = null, RSFStartResource = null, RSFSetGameType = null, RSFSetMapName = null;
+        private static MethodInfo RSFStopResource = null, RSFStartResource = null, RSFSetGameType = null, RSFSetMapName = null;
 
         internal static ReadOnlyDictionary<string, Client> Clients { get; private set; }
         internal static ReadOnlyDictionary<ushort, Client> ClientsByNetId { get; private set; }
@@ -66,20 +74,6 @@ namespace ServerWrapper
 
             if (serverasm != null)
             {
-                LogScriptFunctions = serverasm.GetType("CitizenMP.Server.Resources.LogScriptFunctions");
-
-                if (LogScriptFunctions != null)
-                {
-                    LSFPrint = LogScriptFunctions.GetMethod("Print_f", BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public);
-                }
-
-                RconScriptFunctions = serverasm.GetType("CitizenMP.Server.Resources.RconScriptFunctions");
-
-                if (RconScriptFunctions != null)
-                {
-                    RconSFRconPrint = RconScriptFunctions.GetMethod("RconPrint_f", BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public);
-                }
-
                 PlayerScriptFunctions = serverasm.GetType("CitizenMP.Server.Resources.PlayerScriptFunctions");
 
                 if (PlayerScriptFunctions != null)
@@ -108,14 +102,16 @@ namespace ServerWrapper
                     SEAddEventHandler = ScriptEnvironment.GetMethod("AddEventHandler_f", BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public);
                     SEGetInstanceId = ScriptEnvironment.GetMethod("GetInstanceId", BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public);
 
-                    object CurrentEnvironmentInstance = ScriptEnvironment.GetProperty("CurrentEnvironment", BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public).GetValue(null);
-                    EventHandlers = (Dictionary<string, List<Delegate>>)ScriptEnvironment.GetField("m_eventHandlers", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public).GetValue(CurrentEnvironmentInstance);
+                    SECurrentEnvironment = ScriptEnvironment.GetProperty("CurrentEnvironment", BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public).GetValue(null);
+                    EventHandlers = (Dictionary<string, List<Delegate>>)ScriptEnvironment.GetField("m_eventHandlers", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public).GetValue(SECurrentEnvironment);
+
+                    SELuaEnvironment = ScriptEnvironment.GetField("m_luaEnvironment", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public).GetValue(SECurrentEnvironment);
 
                     SEScriptTimer = ScriptEnvironment.GetNestedType("ScriptTimer", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
 
                     if (SEScriptTimer != null)
                     {
-                        SEScriptTimerList = (IList)ScriptEnvironment.GetField("m_timers", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public).GetValue(CurrentEnvironmentInstance);
+                        SEScriptTimerList = (IList)ScriptEnvironment.GetField("m_timers", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public).GetValue(SECurrentEnvironment);
 
                         SEScriptTimerFunction = SEScriptTimer.GetProperty("Function", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
                         SEScriptTimerTickFrom = SEScriptTimer.GetProperty("TickFrom", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
@@ -134,7 +130,6 @@ namespace ServerWrapper
 
                 if (ResourceScriptFunctions != null)
                 {
-                    //RSFGetInvokingResource = ScriptEnvironment.GetMethod("GetInvokingResource_f", BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public);
                     RSFStopResource = ScriptEnvironment.GetMethod("StopResource_f", BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public);
                     RSFStartResource = ScriptEnvironment.GetMethod("StartResource_f", BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public);
                     RSFSetGameType = ScriptEnvironment.GetMethod("SetGameType_f", BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public);
@@ -145,14 +140,14 @@ namespace ServerWrapper
                 {
                     foreach (MethodInfo mi in t.GetMethods(BindingFlags.Instance | BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public))
                     {
-                        foreach (object attr in mi.GetCustomAttributes())
-                        {
-                            if (attr.GetType().ToString().Contains("LuaMember"))
-                            {
-                                instance.RconPrint(t + " (" + mi.ReturnType + ") " + mi.Name, string.Join(", ", mi.GetParameters().Select(pi => "(" + pi.ParameterType + ") " + pi.Name)));
-                            }
-                        }
+                        foreach (object attr in mi.GetCustomAttributes()) if (attr.GetType().ToString().Contains("LuaMember")) instance.Print(t + " (" + mi.ReturnType + ") " + mi.Name, string.Join(", ", mi.GetParameters().Select(pi => "(" + pi.ParameterType + ") " + pi.Name)));
+
+                        //instance.Print(t + " (" + mi.ReturnType + ") " + mi.Name, string.Join(", ", mi.GetParameters().Select(pi => "(" + pi.ParameterType + ") " + pi.Name)));
                     }
+
+                    //foreach (FieldInfo fi in t.GetFields(BindingFlags.Instance | BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public)) instance.Print(t + " (" + fi.FieldType + ") " + fi.Name);
+
+                    //foreach (PropertyInfo pi in t.GetProperties(BindingFlags.Instance | BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public)) instance.Print(t + " (" + pi.PropertyType + ") " + pi.Name);
                 }*/
             }
 
@@ -259,7 +254,9 @@ namespace ServerWrapper
                 if (currentver.Length < 3 || !int.TryParse(currentver[2], out CurrentBuild)) CurrentBuild = 0;
                 if (currentver.Length < 4 || !int.TryParse(currentver[3], out CurrentRevision)) CurrentRevision = 0;
                 string current = CurrentMajor + "." + CurrentMinor + "." + CurrentBuild, latest = "";
+
                 //CurrentMajor = 0;
+
                 bool update = false;
 
                 while (true)
@@ -286,17 +283,17 @@ namespace ServerWrapper
 
                         if (update)
                         {
-                            instance.RconPrint("ServerWrapper: ---------------------------------------------------------------------------------------------------");
-                            instance.RconPrint("ServerWrapper: An update to ServerWrapper is available!");
-                            instance.RconPrint("ServerWrapper: Current version: " + current + ", latest version: " + latest + ".");
-                            instance.RconPrint("ServerWrapper: For more info, visit https://forum.fivem.net/t/release-c-net-wrapper-for-server-side-scripts/20325.");
-                            instance.RconPrint("ServerWrapper: Enter the command \"swupdate\" to open the link above in your default browser.");
-                            instance.RconPrint("ServerWrapper: ---------------------------------------------------------------------------------------------------");
+                            instance.Print("---------------------------------------------------------------------------------------------------");
+                            instance.Print("A ServerWrapper update is available!");
+                            instance.Print("Current version: " + current + ", latest version: " + latest + ".");
+                            instance.Print("For more info, visit https://forum.fivem.net/t/release-c-net-wrapper-for-server-side-scripts/20325.");
+                            instance.Print("Enter the command \"swupdate\" to open the link above in your default browser.");
+                            instance.Print("---------------------------------------------------------------------------------------------------");
                         }
                     }
                     catch (Exception e)
                     {
-                        instance.RconPrint("ServerWrapper: Update check failed, will try again in 10 minutes.");
+                        instance.Print(PrintType.Error, "Update check failed, will try again in 10 minutes.");
                         instance.PrintException(e);
                     }
 
@@ -315,25 +312,25 @@ namespace ServerWrapper
                 e = e.InnerException;
             }
 
-            foreach (string msgs in msg.Split(new string[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries)) RconPrint(msgs);
+            foreach (string m in msg.Split(new string[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries)) Print(PrintType.Error, m);
         }
 
         private static void Load(string path)
         {
-            instance.RconPrint("ServerWrapper: Loading scripts in \"" + path + "\"...");
+            instance.Print("Loading scripts in \"" + path + "\"...");
 
             foreach (string file in Directory.GetFiles(path, "*.dll"))
             {
                 if (AssemblyName.GetAssemblyName(file).Name == "ServerWrapper")
                 {
-                    instance.RconPrint("ServerWrapper: Found ServerWrapper assembly in Scripts folder. Removing...");
+                    instance.Print("Found ServerWrapper assembly in Scripts folder. Removing...");
                     try
                     {
                         File.Delete(file);
                     }
                     catch (Exception e)
                     {
-                        instance.RconPrint("ServerWrapper: Failed to remove ServerWrapper assembly from Scripts folder, this may cause issues.");
+                        instance.Print(PrintType.Warning, "Failed to remove ServerWrapper assembly from Scripts folder, this may cause issues.");
                         instance.PrintException(e);
                     }
                 }
@@ -393,7 +390,7 @@ namespace ServerWrapper
 
             mefLoader.Domain.UnhandledException += (sender, e) =>
             {
-                instance.RconPrint("ServerWrapper: Unhandled exception occured in script.");
+                instance.Print(PrintType.Error, "Unhandled exception occured in script.");
                 instance.PrintException((Exception)e.ExceptionObject);
             };
 
@@ -408,7 +405,7 @@ namespace ServerWrapper
             {
                 SeparateAppDomain.Delete(path);
 
-                instance.RconPrint("ServerWrapper: No scripts found in \"" + path + "\".");
+                instance.Print("No scripts found in \"" + path + "\".");
 
                 return;
             }
@@ -417,8 +414,8 @@ namespace ServerWrapper
 
             _scripts.Add(path, scripts);
 
-            instance.RconPrint("ServerWrapper: " + scripts.Count + " script(s) found in \"" + path + "\".");
-            instance.RconPrint("");
+            instance.Print(scripts.Count + " script(s) found in \"" + path + "\".");
+            instance.Print("");
 
             // Sorting logic from ScriptHookVDotNet
             Dictionary<IServerScript, List<string>> graph = new Dictionary<IServerScript, List<string>>();
@@ -442,8 +439,8 @@ namespace ServerWrapper
 
                 if (s == null)
                 {
-                    instance.RconPrint("ServerWrapper: Detected a circular script dependency. Aborting...");
-                    instance.RconPrint("");
+                    instance.Print(PrintType.Fatal, "Detected a circular script dependency. Aborting...");
+                    instance.Print("");
 
                     return;
                 }
@@ -454,7 +451,7 @@ namespace ServerWrapper
                 foreach (var kv in graph) kv.Value.Remove(s.TypeName);
             }
 
-            LoadScripts(sorted);
+            if (graph.Count == 0) LoadScripts(sorted);
         }
 
         private static void LoadScripts(Queue<IServerScript> scripts)
@@ -473,12 +470,12 @@ namespace ServerWrapper
                     }
                     catch (Exception e)
                     {
-                        instance.RconPrint("ServerWrapper: \"" + script.Name + "\"'s Tick() failed.");
+                        instance.Print(PrintType.Error, "\"" + script.Name + "\"'s Tick() failed.");
                         instance.PrintException(e);
                     }
                 }, true);
 
-                instance.RconPrint("ServerWrapper: Creating proxy for script \"" + script.Name + "\"...");
+                instance.Print("Creating proxy for script \"" + script.Name + "\"...");
 
                 ss.CreateProxy(instance, scripts);
             }
@@ -492,7 +489,7 @@ namespace ServerWrapper
             }
             catch (Exception e)
             {
-                RconPrint("ServerWrapper: \"" + script.Name + "\"'s Load() failed.");
+                Print(PrintType.Error, "\"" + script.Name + "\"'s Load() failed.");
                 PrintException(e);
             }
 
@@ -503,20 +500,20 @@ namespace ServerWrapper
 
         private static void Reload(string path)
         {
-            instance.RconPrint("ServerWrapper: Reloading scripts in \"" + path + "\"... (Unloading...)");
-            instance.RconPrint("");
+            instance.Print("Reloading scripts in \"" + path + "\"... (Unloading...)");
+            instance.Print("");
 
             Unload(path);
 
-            instance.RconPrint("ServerWrapper: Reloading scripts in \"" + path + "\"... (Loading...)");
-            instance.RconPrint("");
+            instance.Print("Reloading scripts in \"" + path + "\"... (Loading...)");
+            instance.Print("");
 
             Load(path);
         }
 
         private static void Unload(string path)
         {
-            instance.RconPrint("ServerWrapper: Unloading scripts in \"" + path + "\"...");
+            instance.Print("Unloading scripts in \"" + path + "\"...");
 
             AppDomain oldAppDomain = null;
             List<IServerScript> oldscripts = new List<IServerScript>();
@@ -530,8 +527,8 @@ namespace ServerWrapper
                 oldAppDomain = SeparateAppDomain.Extract(path);
             }
 
-            instance.RconPrint("ServerWrapper: " + oldscripts.Count + " script(s) unloaded from \"" + path + "\".");
-            instance.RconPrint("");
+            instance.Print(oldscripts.Count + " script(s) unloaded from \"" + path + "\".");
+            instance.Print("");
 
             ScriptTimer[] timers;
             lock (ScriptTimers) timers = ScriptTimers.ToArray();
@@ -554,7 +551,7 @@ namespace ServerWrapper
                             }
                             catch (Exception e)
                             {
-                                instance.RconPrint("ServerWrapper: Failed to remove \"" + script.Name + "\"'s event handlers for event \"" + eventname + "\".");
+                                instance.Print(PrintType.Error, "Failed to remove \"" + script.Name + "\"'s event handlers for event \"" + eventname + "\".");
                                 instance.PrintException(e);
                             }
                         }
@@ -574,7 +571,7 @@ namespace ServerWrapper
                 }
                 catch (Exception e)
                 {
-                    instance.RconPrint("ServerWrapper: \"" + script.Name + "\"'s Unload() failed.");
+                    instance.Print(PrintType.Error, "\"" + script.Name + "\"'s Unload() failed.");
                     instance.PrintException(e);
                 }
             }
@@ -587,17 +584,47 @@ namespace ServerWrapper
 
         internal void Print(params object[] args)
         {
-            if (LSFPrint != null) LSFPrint.Invoke(null, new object[] { args });
+            Print(PrintType.Info, args);
         }
 
-        /*internal void RconPrint(string str)
+        internal void Print(PrintType type, params object[] args)
         {
-            if (RSFRconPrint != null) RSFRconPrint.Invoke(null, new object[] { str });
-        }*/
+            Print(this.Log("Print", "ServerWrapper\\Wrapper.cs"), type, args);
+        }
 
-        internal void RconPrint(params object[] args)
+        internal void Print(string prefix, string file, int line, PrintType type, params object[] args)
         {
-            if (RconSFRconPrint != null) RconSFRconPrint.Invoke(null, new object[] { string.Join(" ", args) });
+            Print(this.Log(prefix, file, line), type, args);
+        }
+
+        internal void Print(ServerScript script, string prefix, string file, int line, PrintType type, params object[] args)
+        {
+            Print(LogExtensions.Log(script, prefix, file, line), type, args);
+        }
+
+        internal void Print(CitizenMP.Server.Logging.BaseLog log, PrintType type, params object[] args)
+        {
+            Func<string> func = () => { return string.Join(" ", args.Select(a => a ?? "null")); };
+            if (type == PrintType.Debug)
+            {
+                log.Debug(func);
+            }
+            else if (type == PrintType.Warning)
+            {
+                log.Warn(func);
+            }
+            else if (type == PrintType.Error)
+            {
+                log.Error(func);
+            }
+            else if (type == PrintType.Fatal)
+            {
+                log.Fatal(func);
+            }
+            else
+            {
+                log.Info(func);
+            }
         }
 
         internal ushort[] GetPlayers()
@@ -609,35 +636,35 @@ namespace ServerWrapper
         {
             Player p = GetPlayerFromID(ID);
 
-            return p.Name;
+            return p != null ? p.Name : null;
         }
 
         internal IEnumerable<string> GetPlayerIdentifiers(int ID)
         {
             Player p = GetPlayerFromID(ID);
 
-            return p.Identifiers;
+            return p != null ? p.Identifiers : null;
         }
 
         internal int GetPlayerPing(int ID)
         {
             Player p = GetPlayerFromID(ID);
 
-            return p.Ping;
+            return p != null ? p.Ping : -1;
         }
 
         internal string GetPlayerEP(int ID)
         {
             Player p = GetPlayerFromID(ID);
 
-            return p.RemoteEP.ToString();
+            return p != null ? p.RemoteEP.ToString() : null;
         }
 
         internal double GetPlayerLastMsg(int ID)
         {
             Player p = GetPlayerFromID(ID);
 
-            return Time.CurrentTime - p.LastSeen;
+            return p != null ? Time.CurrentTime - p.LastSeen : 99999999;
         }
 
         internal int GetHostID()
@@ -683,9 +710,7 @@ namespace ServerWrapper
 
         internal bool WasEventCanceled()
         {
-            if (ESFWasEventCanceled != null) return (bool)ESFWasEventCanceled.Invoke(null, new object[] { });
-
-            return false;
+            return ESFWasEventCanceled != null ? (bool)ESFWasEventCanceled.Invoke(null, new object[] { }) : false;
         }
 
         internal ScriptTimer CreateTimer(ServerScript caller, int delay, bool loop = false)
@@ -788,7 +813,7 @@ namespace ServerWrapper
                     continue;
                 }
 
-                if (type.ToString().StartsWith("Neo.IronLua")) instance.Print("ServerWrapper: Conversation required for " + type + "!");
+                if (type.ToString().StartsWith("Neo.IronLua")) instance.Print(PrintType.Warning, "Conversation required for " + type + "!");
 
                 Converted.Add(arg);
             }
@@ -881,10 +906,10 @@ namespace ServerWrapper
             return SEGetInstanceId != null ? (int)SEGetInstanceId.Invoke(null, new object[] { }) : -1;
         }
 
-        /*internal string GetInvokingResource()
+        internal int GetEventSource()
         {
-            return RSFGetInvokingResource != null ? (string)RSFGetInvokingResource.Invoke(null, new object[] { }) : null;
-        }*/
+            return SELuaEnvironment != null ? (int)((Neo.IronLua.LuaGlobal)SELuaEnvironment)["source"] : -1;
+        }
 
         internal bool StopResource(string resourceName)
         {

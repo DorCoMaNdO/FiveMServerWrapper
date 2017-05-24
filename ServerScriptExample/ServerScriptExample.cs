@@ -82,7 +82,7 @@ namespace ServerScriptExample
                 {
                     CancelEvent();
 
-                    RconPrint("Example rcon command.");
+                    Print("Example rcon command.");
                 }
             }));
 

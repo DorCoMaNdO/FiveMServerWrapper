@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Runtime.CompilerServices;
 
 namespace ServerWrapper
 {
@@ -11,6 +12,8 @@ namespace ServerWrapper
         public string TypeName { get { return this.GetType().FullName; } }
         private List<string> dependencies = new List<string>();
         public ReadOnlyCollection<string> Dependencies { get; private set; }
+
+        public int EventSource { get { return GetEventSource(); } }
 
         public ReadOnlyDictionary<string, Player> Players { get { return w.Players; } }
         public ReadOnlyDictionary<ushort, Player> PlayersByNetId { get { return w.PlayersByNetId; } }
@@ -58,7 +61,15 @@ namespace ServerWrapper
         {
             w = wrapper;
 
-            SetTimeout(0, (t) => { w.RconPrint("ServerWrapper: Proxy created for script \"" + Name + "\""); w.RconPrint(""); t.Loop = false; w.ETPhoneHome(this, scripts); }); // First ScriptTimer with Print and a call to Loop (usually) causes a small hiccup of 32~150ms for whatever reason, better have it done ahead of time.
+            SetTimeout(0, (t) =>
+            {
+                w.Print("Proxy created for script \"" + Name + "\"");
+                w.Print("");
+
+                t.Loop = false; // First ScriptTimer with Print and a call to Loop (usually) causes a small hiccup of 32~150ms for whatever reason, better have it done ahead of time.
+
+                w.ETPhoneHome(this, scripts);
+            });
         }
 
         public abstract void Load();
@@ -74,66 +85,48 @@ namespace ServerWrapper
 
         public void Print(params object[] args)
         {
-            if (w != null) w.Print(PrintPrefix.Concat(args).ToArray());
+            InternalPrint(args);
         }
 
-        /*public void RconPrint(string str)
+        private void InternalPrint(object[] args,
+            [CallerLineNumber] int sourceLineNumber = 0)
         {
-            if (w != null) w.RconPrint("ServerWrapper script \"" + Name + "\": " + str);
-        }*/
-
-        public void RconPrint(params object[] args)
-        {
-            if (w != null) w.RconPrint(PrintPrefix.Concat(args).ToArray());
+            if (w != null) w.Print(this, "Print (" + Name + ")", "ServerWrapper\\ServerScript.cs", sourceLineNumber, PrintType.Info, args);
         }
 
         public ushort[] GetPlayers()
         {
-            if (w != null) return w.GetPlayers();
-
-            return null;
+            return w != null ? w.GetPlayers() : null;
         }
 
         public string GetPlayerName(int ID)
         {
-            if (w != null) return w.GetPlayerName(ID);
-
-            return null;
+            return w != null ? w.GetPlayerName(ID) : null;
         }
 
         public IEnumerable<string> GetPlayerIdentifiers(int ID)
         {
-            if (w != null) return w.GetPlayerIdentifiers(ID);
-
-            return null;
+            return w != null ? w.GetPlayerIdentifiers(ID) : null;
         }
 
         public int GetPlayerPing(int ID)
         {
-            if (w != null) return w.GetPlayerPing(ID);
-
-            return -1;
+            return w != null ? w.GetPlayerPing(ID) : -1;
         }
 
         public string GetPlayerEP(int ID)
         {
-            if (w != null) return w.GetPlayerEP(ID);
-
-            return null;
+            return w != null ? w.GetPlayerEP(ID) : null;
         }
 
         public double GetPlayerLastMsg(int ID)
         {
-            if (w != null) return w.GetPlayerLastMsg(ID);
-
-            return 99999999;
+            return w != null ? w.GetPlayerLastMsg(ID) : 99999999;
         }
 
         public int GetHostID()
         {
-            if (w != null) return w.GetHostID();
-
-            return -1;
+            return w != null ? w.GetHostID() : -1;
         }
 
         public void DropPlayer(int ID, string reason)
@@ -148,10 +141,7 @@ namespace ServerWrapper
 
         public Player GetPlayerFromID(int ID)
         {
-            if (w != null) return w.GetPlayerFromID(ID);
-
-            //return default(Player);
-            return null;
+            return w != null ? w.GetPlayerFromID(ID) : /*default(Player)*/ null;
         }
 
         public void TriggerClientEvent(string eventname, int netID, params object[] args)
@@ -168,11 +158,12 @@ namespace ServerWrapper
 
         public bool TriggerEvent(string eventname, params object[] args)
         {
-            if (w != null) return w.TriggerEvent(eventname, ConvertArgsFromLocal(args));
+            bool notcanceled = false;
+            if (w != null) notcanceled = w.TriggerEvent(eventname, ConvertArgsFromLocal(args));
 
             lock (DelegateReferences) foreach (object arg in args) if (arg.GetType().IsSubclassOf(typeof(Delegate))) if (DelegateReferences.ContainsKey((Delegate)arg)) DelegateReferences.Remove((Delegate)arg);
 
-            return false;
+            return notcanceled;
         }
 
         public void CancelEvent()
@@ -182,9 +173,7 @@ namespace ServerWrapper
 
         public bool WasEventCanceled()
         {
-            if (w != null) return w.WasEventCanceled();
-
-            return false;
+            return w != null ? w.WasEventCanceled() : false;
         }
 
         internal void RemoveScriptTimerHandler(ScriptTimer timer)
@@ -247,7 +236,7 @@ namespace ServerWrapper
                 }
                 catch (Exception e)
                 {
-                    w.RconPrint("Error executing event handler for event " + eventname + " in resource ServerWrapper (" + Name + "): \n");
+                    w.Print(PrintType.Error, "Error executing event handler for event " + eventname + " in script " + Name + ": \n");
                     w.PrintException(e);
 
                     //EventHandlers[eventname].Clear();
@@ -338,30 +327,22 @@ namespace ServerWrapper
 
         public int GetInstanceID()
         {
-            if (w != null) return w.GetInstanceID();
-
-            return -1;
+            return w != null ? w.GetInstanceID() : -1;
         }
 
-        /*public string GetInvokingResource()
+        public int GetEventSource()
         {
-            if (w != null) return w.GetInvokingResource();
-
-            return null;
-        }*/
+            return w != null ? w.GetEventSource() : -1;
+        }
 
         public bool StopResource(string resourceName)
         {
-            if (w != null) return w.StopResource(resourceName);
-
-            return false;
+            return w != null ? w.StopResource(resourceName) : false;
         }
 
         public bool StartResource(string resourceName)
         {
-            if (w != null) return w.StartResource(resourceName);
-
-            return false;
+            return w != null ? w.StartResource(resourceName) : false;
         }
 
         public void SetGameType(string gameType)
