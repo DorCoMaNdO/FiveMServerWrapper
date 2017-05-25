@@ -44,5 +44,10 @@ namespace ServerWrapper
         {
             c.Touch();
         }*/
+
+        /*public override object InitializeLifetimeService()
+        {
+            return null;
+        }*/
     }
 }

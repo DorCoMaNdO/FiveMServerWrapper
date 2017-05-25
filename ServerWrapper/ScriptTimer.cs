@@ -1,6 +1,7 @@
 ﻿using CitizenMP.Server;
 using System;
 using System.Linq;
+using System.Runtime.Remoting.Lifetime;
 
 namespace ServerWrapper
 {
@@ -45,7 +46,12 @@ namespace ServerWrapper
 
             ID = Guid.NewGuid().ToString();
 
-            lock (Wrapper.ScriptTimers) while (Wrapper.ScriptTimers.Any(st => st.ID == ID)) ID = Guid.NewGuid().ToString(); // Not taking any chances.
+            lock (Wrapper.ScriptTimers)
+            {
+                while (Wrapper.ScriptTimers.Any(st => st.ID == ID)) ID = Guid.NewGuid().ToString(); // Not taking any chances.
+
+                Wrapper.ScriptTimers.Add(this);
+            }
 
             SEScriptTimer = AppDomain.CurrentDomain.CreateInstanceAndUnwrap(Wrapper.SEScriptTimer.Assembly.FullName, Wrapper.SEScriptTimer.FullName);
 
@@ -74,7 +80,7 @@ namespace ServerWrapper
         {
             TickFrom = Time.CurrentTime + Interval;
 
-            lock (Wrapper.ScriptTimers) if (!Wrapper.ScriptTimers.Contains(this)) Wrapper.ScriptTimers.Add(this);
+            //lock (Wrapper.ScriptTimers) if (!Wrapper.ScriptTimers.Contains(this)) Wrapper.ScriptTimers.Add(this);
 
             lock (Wrapper.SEScriptTimerList) Wrapper.SEScriptTimerList.Add(SEScriptTimer);
         }
@@ -85,12 +91,18 @@ namespace ServerWrapper
 
             lock (Wrapper.SEScriptTimerList) while (Wrapper.SEScriptTimerList.Contains(SEScriptTimer)) Wrapper.SEScriptTimerList.Remove(SEScriptTimer);
 
-            lock (Wrapper.ScriptTimers) Wrapper.ScriptTimers.RemoveAll(st => st == this || st.ID == ID);
+            //lock (Wrapper.ScriptTimers) Wrapper.ScriptTimers.RemoveAll(st => st == this || st.ID == ID);
         }
 
         public void Dispose()
         {
             Cancel();
+
+            lock (Wrapper.ScriptTimers) Wrapper.ScriptTimers.RemoveAll(st => st == this || st.ID == ID);
+
+            //RemotingServices.Disconnect(this);
+
+            ((ILease)GetLifetimeService()).Unregister(Wrapper.instance);
 
             caller.RemoveScriptTimerHandler(this);
         }

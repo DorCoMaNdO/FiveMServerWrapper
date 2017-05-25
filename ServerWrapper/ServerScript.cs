@@ -1,8 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
-using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Runtime.Remoting.Lifetime;
 
 namespace ServerWrapper
 {
@@ -23,7 +23,7 @@ namespace ServerWrapper
         private Dictionary<ScriptTimer, ScriptTimerHandler> TimerHandlers = new Dictionary<ScriptTimer, ScriptTimerHandler>();
         private Dictionary<string, List<Delegate>> EventHandlers = new Dictionary<string, List<Delegate>>();
 
-        private static Dictionary<Delegate, string> DelegateReferences = new Dictionary<Delegate, string>();
+        private static Dictionary<string, Delegate> DelegateReferences = new Dictionary<string, Delegate>();
 
         public int Interval { get { return timer != null ? timer.Interval : 100; } set { if (timer != null) timer.Interval = value; } }
 
@@ -69,6 +69,8 @@ namespace ServerWrapper
                 t.Loop = false; // First ScriptTimer with Print and a call to Loop (usually) causes a small hiccup of 32~150ms for whatever reason, better have it done ahead of time.
 
                 w.ETPhoneHome(this, scripts);
+
+                t.Dispose();
             });
         }
 
@@ -146,9 +148,10 @@ namespace ServerWrapper
 
         public void TriggerClientEvent(string eventname, int netID, params object[] args)
         {
-            if (w != null) w.TriggerClientEvent(eventname, netID, ConvertArgsFromLocal(args));
+            object[] cargs = ConvertArgsFromLocal(args);
+            if (w != null) w.TriggerClientEvent(eventname, netID, cargs);
 
-            lock (DelegateReferences) foreach (object arg in args) if (arg.GetType().IsSubclassOf(typeof(Delegate))) if (DelegateReferences.ContainsKey((Delegate)arg)) DelegateReferences.Remove((Delegate)arg);
+            lock (DelegateReferences) foreach (object arg in cargs) if (arg.GetType().IsSubclassOf(typeof(String))) if (DelegateReferences.ContainsKey((string)arg)) DelegateReferences.Remove((string)arg);
         }
 
         public void RegisterServerEvent(string eventname)
@@ -159,9 +162,10 @@ namespace ServerWrapper
         public bool TriggerEvent(string eventname, params object[] args)
         {
             bool notcanceled = false;
-            if (w != null) notcanceled = w.TriggerEvent(eventname, ConvertArgsFromLocal(args));
+            object[] cargs = ConvertArgsFromLocal(args);
+            if (w != null) notcanceled = w.TriggerEvent(eventname, cargs);
 
-            lock (DelegateReferences) foreach (object arg in args) if (arg.GetType().IsSubclassOf(typeof(Delegate))) if (DelegateReferences.ContainsKey((Delegate)arg)) DelegateReferences.Remove((Delegate)arg);
+            lock (DelegateReferences) foreach (object arg in cargs) if (arg.GetType().IsSubclassOf(typeof(String))) if (DelegateReferences.ContainsKey((string)arg)) DelegateReferences.Remove((string)arg);
 
             return notcanceled;
         }
@@ -198,6 +202,10 @@ namespace ServerWrapper
             if (w != null)
             {
                 ScriptTimer timer = w.CreateTimer(this, delay, loop);
+
+                if (timer == null) return null;
+
+                ((ILease)timer.GetLifetimeService()).Register(w);
 
                 if (!TimerHandlers.ContainsKey(timer)) TimerHandlers.Add(timer, callback);
                 //TimerHandlers[timer] = callback;
@@ -260,11 +268,11 @@ namespace ServerWrapper
 
                     lock (DelegateReferences)
                     {
-                        if (DelegateReferences.ContainsValue(s))
+                        if (DelegateReferences.ContainsKey(s))
                         {
-                            Delegate d = DelegateReferences.Where(kv => kv.Value == s).ElementAt(0).Key;
+                            Delegate d = DelegateReferences[s];
 
-                            //DelegateReferences.Remove(d);
+                            //DelegateReferences.Remove(s);
 
                             Converted.Add(d);
 
@@ -293,9 +301,12 @@ namespace ServerWrapper
 
                     lock (DelegateReferences)
                     {
-                        if (!DelegateReferences.ContainsKey(d)) DelegateReferences.Add(d, type.ToString() + "|" + Guid.NewGuid().ToString());
+                        string dref = type.ToString() + "|" + Guid.NewGuid().ToString() + "|" + d.GetHashCode();
+                        while (DelegateReferences.ContainsKey(dref)) dref = type.ToString() + "|" + Guid.NewGuid().ToString() + "|" + d.GetHashCode();
 
-                        Converted.Add(DelegateReferences[d]);
+                        DelegateReferences.Add(dref, d);
+
+                        Converted.Add(dref);
                     }
 
                     continue;

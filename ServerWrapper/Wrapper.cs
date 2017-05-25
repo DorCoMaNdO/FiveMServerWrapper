@@ -9,6 +9,7 @@ using System.IO;
 using System.Linq;
 using System.Net;
 using System.Reflection;
+using System.Runtime.Remoting.Lifetime;
 using System.Threading;
 
 namespace ServerWrapper
@@ -22,7 +23,7 @@ namespace ServerWrapper
         Fatal
     }
 
-    internal class Wrapper : MarshalByRefObject
+    internal class Wrapper : MarshalByRefObject, ISponsor
     {
         private static bool initialized = false;
 
@@ -270,8 +271,8 @@ namespace ServerWrapper
                                 w.Proxy = null;
                                 w.Headers.Add("user-agent", "Mozilla/4.0 (compatible; MSIE 6.0; Windows NT 5.2; .NET CLR 1.0.3705;)"); // Fails without a user-agent header.
 
-                                JObject data = JObject.Parse(w.DownloadString("https://api.github.com/repos/DorCoMaNdO/FiveMServerWrapper/releases/latest"));
-                                string[] ver = data["tag_name"].ToString().Split('.');
+                                JObject json = JObject.Parse(w.DownloadString("https://api.github.com/repos/DorCoMaNdO/FiveMServerWrapper/releases/latest"));
+                                string[] ver = json["tag_name"].ToString().Split('.');
                                 if (ver.Length < 1 || !int.TryParse(ver[0], out NewMajor)) NewMajor = 1;
                                 if (ver.Length < 2 || !int.TryParse(ver[1], out NewMinor)) NewMinor = 2;
                                 if (ver.Length < 3 || !int.TryParse(ver[2], out NewBuild)) NewBuild = 0;
@@ -458,26 +459,30 @@ namespace ServerWrapper
         {
             if (scripts.Count > 0)
             {
-                IServerScript script = scripts.Dequeue();
+                IServerScript iscript = scripts.Dequeue();
 
-                ServerScript ss = ((ServerScript)script);
+                ServerScript script = (ServerScript)iscript;
 
-                ss.timer = new ScriptTimer(ss, 100, (timer) =>
+                ((ILease)script.GetLifetimeService()).Register(instance);
+
+                script.timer = new ScriptTimer(script, 100, (timer) =>
                 {
                     try
                     {
-                        script.Tick();
+                        iscript.Tick();
                     }
                     catch (Exception e)
                     {
-                        instance.Print(PrintType.Error, "\"" + script.Name + "\"'s Tick() failed.");
+                        instance.Print(PrintType.Error, "\"" + iscript.Name + "\"'s Tick() failed.");
                         instance.PrintException(e);
                     }
                 }, true);
 
-                instance.Print("Creating proxy for script \"" + script.Name + "\"...");
+                ((ILease)script.timer.GetLifetimeService()).Register(instance);
 
-                ss.CreateProxy(instance, scripts);
+                instance.Print("Creating proxy for script \"" + iscript.Name + "\"...");
+
+                script.CreateProxy(instance, scripts);
             }
         }
 
@@ -533,47 +538,50 @@ namespace ServerWrapper
             ScriptTimer[] timers;
             lock (ScriptTimers) timers = ScriptTimers.ToArray();
 
-            foreach (IServerScript script in oldscripts)
+            foreach (IServerScript iscript in oldscripts)
             {
-                foreach (ScriptTimer st in timers.Where(st => st.caller == script)) st.Dispose();
+                foreach (ScriptTimer st in timers.Where(st => st.caller == iscript)) st.Dispose();
 
                 lock (scripteventhandlers)
                 {
-                    if (scripteventhandlers.ContainsKey(script))
+                    if (scripteventhandlers.ContainsKey(iscript))
                     {
-                        foreach (string eventname in scripteventhandlers[script].Keys)
+                        foreach (string eventname in scripteventhandlers[iscript].Keys)
                         {
                             try
                             {
-                                instance.RemoveAllEventHandlers((ServerScript)script, eventname);
+                                instance.RemoveAllEventHandlers((ServerScript)iscript, eventname);
 
-                                ((ServerScript)script).RemoveAllEventHandlers(eventname);
+                                ((ServerScript)iscript).RemoveAllEventHandlers(eventname);
                             }
                             catch (Exception e)
                             {
-                                instance.Print(PrintType.Error, "Failed to remove \"" + script.Name + "\"'s event handlers for event \"" + eventname + "\".");
+                                instance.Print(PrintType.Error, "Failed to remove \"" + iscript.Name + "\"'s event handlers for event \"" + eventname + "\".");
                                 instance.PrintException(e);
                             }
                         }
 
-                        scripteventhandlers[script].Clear();
+                        scripteventhandlers[iscript].Clear();
 
-                        scripteventhandlers.Remove(script);
+                        scripteventhandlers.Remove(iscript);
                     }
                 }
 
-                ScriptTimer t = ((ServerScript)script).timer;
-                if (t != null) t.Dispose();
+                ServerScript script = ((ServerScript)iscript);
+
+                if (script.timer != null) script.timer.Dispose();
 
                 try
                 {
-                    script.Unload();
+                    iscript.Unload();
                 }
                 catch (Exception e)
                 {
-                    instance.Print(PrintType.Error, "\"" + script.Name + "\"'s Unload() failed.");
+                    instance.Print(PrintType.Error, "\"" + iscript.Name + "\"'s Unload() failed.");
                     instance.PrintException(e);
                 }
+
+                ((ILease)script.GetLifetimeService()).Unregister(instance);
             }
 
             lock (scripteventhandlers) scripteventhandlers.Clear();
@@ -717,7 +725,7 @@ namespace ServerWrapper
         {
             ScriptTimer st = new ScriptTimer(caller, delay, (timer) => { caller.CallScriptTimerHandler(timer); }, loop);
 
-            return st;
+            return st.caller == caller ? st : null;
         }
 
         internal bool HasTimeoutFinished(ServerScript caller, string id)
@@ -929,6 +937,16 @@ namespace ServerWrapper
         internal void SetMapName(string mapName)
         {
             if (RSFSetMapName != null) RSFSetMapName.Invoke(null, new object[] { mapName });
+        }
+
+        public TimeSpan Renewal(ILease lease)
+        {
+            return new TimeSpan(0, 5, 0);
+        }
+
+        public override object InitializeLifetimeService()
+        {
+            return null;
         }
     }
 }
